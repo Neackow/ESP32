@@ -3,10 +3,10 @@
 #define SA1  17      // Interrupt pins motor 1
 #define SB1  16      // Interrupt pins motor 1
 
-#define DIR2 32      // Direction pin motor 2
-#define EN2  33      // PWM pin motor 2
-#define SA2  25      // Interrupt pins motor 2
-#define SB2  26      // Interrupt pins motor 2
+#define DIR2 26      // Direction pin motor 2
+#define EN2  25      // PWM pin motor 2
+#define SA2  33      // Interrupt pins motor 2
+#define SB2  32      // Interrupt pins motor 2
 
 
 

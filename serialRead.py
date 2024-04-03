@@ -18,4 +18,4 @@ while x.isOpen() == True:
          print(data)
          with open('SensorData.csv', mode='a') as sensor_file:
              sensor_writer = csv.writer(sensor_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-             sensor_writer.writerow([int(data), str(time.asctime())])
+             sensor_writer.writerow([float(data), str(time.asctime())])
