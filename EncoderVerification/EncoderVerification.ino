@@ -79,8 +79,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(SA1), changeEncoder, CHANGE);
   //attachInterrupt(digitalPinToInterrupt(SA1), encoder_F1, FALLING);
   //attachInterrupt(digitalPinToInterrupt(SA1), encoder_R1, RISING);
-  /*attachInterrupt(SA2, encoder_R2, RISING);
-  attachInterrupt(SA2, encoder_F2, FALLING);
+  /*attachInterrupt(digitalPinToInterrupt(SA2), encoder_R2, RISING);
+  attachInterrupt(digitalPinToInterrupt(SA2), encoder_F2, FALLING);
 
   
   for(int k=0; k < NMOTORS; k++){
@@ -166,7 +166,6 @@ void loop() {
   Serial.print(diff);
   Serial.println();
 
-  delayMicroseconds(625);
 }
 
 void setMotor(int dir, int pwm_value, int PIN_DIR, int PIN_EN){
