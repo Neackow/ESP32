@@ -3,7 +3,7 @@
 void setup()
 { 
   Serial.begin(115200);
-  Wire.begin(0x40);
+  Wire.begin(0x40); // Defines the card's slave address
   Wire.onRequest(requestEvent); // register event
   Wire.onReceive(receiveEvent); // register event
 }
@@ -14,6 +14,7 @@ void loop()
   Wire.onRequest(requestEvent);
 }
 
+//the function to be called, takes no parameters and returns nothing.
 void requestEvent()
 {
   byte b1 = 0x01;
@@ -24,7 +25,8 @@ void requestEvent()
   Wire.write("6");
 }
 
-void receiveEvent(int howMany)
+// the function to be called when the peripheral device receives data; this should take a single int parameter (the number of bytes read from the controller device) and return nothing.
+void receiveEvent(int howMany) 
 {
   while (Wire.available() > 0)
   {
