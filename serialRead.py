@@ -7,8 +7,8 @@ with open('SensorData.csv', mode='a') as sensor_file:
     sensor_writer.writerow(["Value", "Time"])
 
 
-com = "/dev/ttyUSB0"
-baud = 115200
+com = "/dev/ttyACM0"
+baud = 9600
 
 x = serial.Serial(com, baud, timeout = 0.1)
 
