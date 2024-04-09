@@ -1,6 +1,6 @@
 #include <Wire.h>
 
-byte dataArray[4];
+float dataArray[4];
 
 
 void setup()

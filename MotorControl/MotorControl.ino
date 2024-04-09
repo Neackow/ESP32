@@ -1,8 +1,10 @@
+#include <Wire.h>
+
 // Pin definition
-const int dir[] = {5,18};  // Direction pins
-const int en[]  = {4,19};  // Enable pins: sets PWM
-const int sa[]  = {3,20};  // Encoder pins SA: interrupt required
-const int sb[]  = {2,21};  // Encoder pins SB: interrupt required
+const int dir[] = {6,18};  // Direction pins
+const int en[]  = {7,19};  // Enable pins: sets PWM
+const int sa[]  = {8,20};  // Encoder pins SA: interrupt required
+const int sb[]  = {9,21};  // Encoder pins SB: interrupt required
 
 // Motor values.
 #define GB_RATIO  53  // Gearbox ratio of the motor. In my case - 53:1.
@@ -25,7 +27,7 @@ float v[NMOTORS]          = {0.0,0.0};  // Computed speed (live).
 // Control command
 float output[NMOTORS]   = {0.0,0.0};      // Output of the controller
 float target[4]         = {0.0,0,0.0,0};  // Contains the desired motor behaviour.
-//const char* message[2]  = {"Test1","Test2"};
+
 unsigned long previousMillis[NMOTORS]  = {0,0};
 const long interval     = 20000;
 int diff[NMOTORS]       = {0,0};
@@ -33,7 +35,6 @@ int coeffMotor[NMOTORS] = {1,-1};
 
 // Debugging
 float e[NMOTORS]  = {0.0,0.0};
-float order[4] = {0.0,1,0.0,0};
 unsigned long tempsActuel = 0;
 float previousDir[NMOTORS] = {0,0};
 
@@ -66,6 +67,8 @@ void setup() {
     previousMillis[k] = micros();
   }
   
+  Wire.begin(0x40);             // Defines the card's slave address
+  Wire.onReceive(receiveEvent); // To receive the command.
 }
 
 
@@ -76,6 +79,7 @@ void loop(){
   pos[1] = posi[1];
   interrupts();
 
+  /*
   if(tempsActuel < 7000){
     order[0] = 0.0;
     order[1] = 1;
@@ -93,13 +97,13 @@ void loop(){
     order[1] = 1;
     order[2] = 0.0;
     order[3] = 0;
-  }
+  }*/
   // ORDER: TO GET FROM I2C. The structure is: {V1,DIR1,V2,DIR2}. Speed in RPM, max 150 (more like 145).
   
-  for(int k = 0; k < 4; k++){
+  /*for(int k = 0; k < 4; k++){
     target[k] = order[k];
   }
-  tempsActuel = millis();
+  tempsActuel = millis();*/
   
   // Compute velocity & control the motors.
   computeVelocityAndController<0>();
@@ -112,9 +116,9 @@ void loop(){
   Serial.print(target[0]);
   //Serial.print(" ");
   //Serial.print(vFilt[1]);
-  /*Serial.print(" ");
-  Serial.print(output[0]);
   Serial.print(" ");
+  Serial.print(output[0]);
+  /*Serial.print(" ");
   Serial.print(output[1]);
   Serial.print(" ");
   Serial.print(eintegral[0]);
@@ -131,6 +135,20 @@ void loop(){
   // 625µs delay: to maintain correct sampling frequency of 1600 Hz.
   // 6 ticks per turn x 53 (Gearbox) x 2.5 RPS (max) = 795 Hz. x2 to avoid aliasing (Shannon's theorem) : ~1600 Hz. 
   delayMicroseconds(625);
+}
+
+
+// *********************************************** //
+// ************* I2C COMMUNICATION *************** //
+// *********************************************** //
+
+void receiveEvent(int howMany) 
+{
+  for(int i=0; i < howMany; i++){
+    target[i] = Wire.read();
+    //Serial.println(target[i]);
+  }
+  //Serial.println();
 }
 
 
@@ -156,7 +174,7 @@ void computeVelocityAndController(){
     prevT_V[k]  = currT_V;
   }
 
-  vFilt[k]    = 0.9806*vFilt[k] + 0.00973*v[k] + 0.0097*vPrev[k];
+  vFilt[k]    = 0.9806*vFilt[k] + 0.00973*v[k] + 0.0097*vPrev[k]; // Low-pass filter at 5 Hz.
   vPrev[k]    = v[k];
 
 

@@ -9,18 +9,17 @@
 #define SA2  25      // Interrupt pins motor 2
 #define SB2  26      // Interrupt pins motor 2
 */
+#include <Wire.h>
 
 
-#define DIR1 2
-#define EN1 3
-#define SA1 4
-#define SB1 5
-
+#define DIR1 6
+#define EN1 7
+#define SA1 8
+#define SB1 9
 
 #define GB_RATIO  53  // Gearbox ratio of the motor. In my case - 53:1.
 #define PPR       6   // Pulse Per Rotation for the encoder. In my case, 3. 
 #define NMOTORS   2
-
 
 
 int   pos[NMOTORS]          = {0,0};  // To safely get the value of posi[NMOTORS] within noInterrupt().
@@ -33,15 +32,9 @@ int   posPrev[NMOTORS]      = {0,0};  // Previous value of the encoder count.
 
 long  prevT[NMOTORS]      = {0,0};  // Previous time at which a computation was made.
 
-
 float vFilt[NMOTORS]      = {0.0,0.0};  // Filtered speed.
 float vPrev[NMOTORS]      = {0.0,0.0};  // Previous speed.
 
-/*
-#define DIR1 19      // Direction pin motor 1
-#define EN1  18      // PWM pin motor 1
-#define SA1  17      // Interrupt pins motor 1
-#define SB1  16      // Interrupt pins motor 1*/
 
 const int dir[] = {19,32};  // Direction pins
 const int en[]  = {18,33};  // Enable pins: sets PWM
@@ -54,6 +47,8 @@ float v[NMOTORS]    = {0.0,0.0};
 long currT          = 0;
 float deltaT        = 0.0;
 int diff            = 0;
+
+float target[4] = {0.0,0.0,0.0,0.0};
 
 void setup() {
   // put your setup code here, to run once:
@@ -103,12 +98,17 @@ void setup() {
     prevT[k] = timeOfStart;
   }
   previousMillis = micros();
+
+
+  Wire.begin(0x40);             // Defines the card's slave address
+  Wire.onReceive(receiveEvent); // To receive the command.
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
   unsigned long currentMillis = micros();
   
+  /*
   int target[NMOTORS];
   target[0] = 255;
   target[1] = 170;
@@ -116,6 +116,7 @@ void loop() {
   int direction[NMOTORS];
   direction[0] = 1;
   direction[1] = 1-direction[0]; // This version is when I want to go forward or backward. It automatically gets 0 or 1 when I put 1 or 0 on direction[0].
+  */
   /*
   // To go left, right, etc.
   direction[0] = 1;
@@ -133,7 +134,7 @@ void loop() {
     previousMillis = currentMillis;
     currT     = micros();
     deltaT    = ((float) (currT-prevT[0]))/1.0e6;
-    diff      = -(pos[0] - posPrev[0]);
+    diff      = (posPrev[0] - pos[0]);
     v[0]      = (diff*60.0)/(PPR*GB_RATIO*deltaT); // The *60.0 is here to get the speed in RPM and not in RPS.
 
     posPrev[0]  = pos[0];
@@ -143,7 +144,8 @@ void loop() {
   vFilt[0]    = 0.9806*vFilt[0] + 0.00973*v[0] + 0.0097*vPrev[0]; // 5Hz cut-off frequency, sampling at 1600Hz
   vPrev[0]    = v[0]; 
 
-  setMotor(direction[0],target[0],DIR1,EN1);
+  int direction = (int) target[1];
+  setMotor(direction,target[0],DIR1,EN1);
   /*
   for(int k = 0; k < NMOTORS; k++){
     setMotor(direction[k],target[k],dir[k],en[k]);
@@ -163,10 +165,25 @@ void loop() {
   Serial.print(" ");
   Serial.print(vFilt[0]);
   Serial.print(" ");
-  Serial.print(diff);
+  Serial.print(target[0]);
+  Serial.print(" ");
+  Serial.print(direction);
+  //Serial.print(" ");
+  //Serial.print(diff);
   Serial.println();
 
 }
+
+
+void receiveEvent(int howMany) 
+{
+  for(int i=0; i < howMany; i++){
+    target[i] = Wire.read();
+    //Serial.println(target[i]);
+  }
+  //Serial.println();
+}
+
 
 void setMotor(int dir, int pwm_value, int PIN_DIR, int PIN_EN){
   analogWrite(PIN_EN, 0);
