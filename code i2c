@@ -1,0 +1,25 @@
+Data = [1,2,3,4], List_data = lists:flatten(lists:map(fun(X) -> X end, lists:map(fun(X) -> lists:sublist(binary_to_list(term_to_binary(X)),3,8) end, Data))), I2C1 = grisp_i2c:open(i2c1).
+grisp_i2c:transfer(I2C1, [{write, 16#40, 1, List_data}]).
+
+
+
+Data = term_to_binary([1,2,3,4]).
+test = lists:sublist(binary_to_list(term_to_binary([1,2,3,4])),3,8).
+
+f(), Data = [140,1,140,0], List_data = lists:flatten(lists:map(fun(X) -> X end, lists:map(fun(X) -> lists:sublist(binary_to_list(term_to_binary(X)),3,8) end, Data))).
+I2C1 = grisp_i2c:open(i2c1), grisp_i2c:transfer(I2C1, [{write, 16#40, 1, List_data}]).
+
+Data = [2000,3000,4000,5000].
+Data = [16#01,16#02,16#03,16#04].
+
+
+
+
+net_kernel:connect_node(earth@neackow_z4).
+net_kernel:connect_node(fries@neackow_z4).
+
+erl -sname ketchup@neackow_z4 -setcookie TestingCookie
+erl -sname fries@neackow_z4 -setcookie TestingCookie
+
+{shell, fries@neackow_z4} ! {hello, from, self()}.
+spawn(fries@neackow_z4, fun() -> io:format("I'm on ~p~n", [node()]) end).
