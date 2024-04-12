@@ -18,19 +18,24 @@ Data = [16#01,16#02,16#03,16#04].
 net_kernel:connect_node(earth@neackow_z4).
 net_kernel:connect_node(fries@neackow_z4).
 
+{shell, fries@neackow_z4} ! {hello, from, self()}.
+spawn(fries@neackow_z4, fun() -> io:format("I'm on ~p~n", [node()]) end).
+
 erl -sname ketchup@neackow_z4 -setcookie TestingCookie
 erl -sname fries@neackow_z4 -setcookie TestingCookie
+
+
  -> Fait : nom : sensor_fusion@nav_1 & sensor_fusion@nav_2
+net_kernel:connect_node(remote_nav_2@neackow_z4). -> fail.
 
-net_kernel:connect_node(remote_nav_2@neackow_z4).
-
-net_adm:ping(sensor_fusion@nav_2). -> pong then crash.
+net_adm:ping(sensor_fusion@nav_2). -> pong then crash. WHEN IN REMOTE.
 net_adm:ping(remote_nav_2). -> pang.
 net_adm:ping(remote_nav_2@neackow_z4). -> pang.
 net_adm:ping(nav_2). -> pang.
 
-rpc:call(sensor_fusion@nav_2, sensor_fusion, output_log, [["Test",[5]]]).
+rpc:call(sensor_fusion@nav_2, sensor_fusion, output_log, [["Test",[5]]]). % DOESN'T WORK.
 rpc:call(sensor_fusion@nav_2, sensor_fusion, launch, []).
+rpc:call(sensor_fusion@nav_2, sensor_fusion, stop_all, []).
 
-{shell, fries@neackow_z4} ! {hello, from, self()}.
-spawn(fries@neackow_z4, fun() -> io:format("I'm on ~p~n", [node()]) end).
+
+rpc:call(sensor_fusion@nav_2, lists, sort, [[a,e,f,t,h,s,a]]). % TO TEST IF RPC:CALL WORKS.

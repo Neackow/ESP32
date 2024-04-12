@@ -1,21 +1,15 @@
-/*
-#define DIR1 19      // Direction pin motor 1
-#define EN1  18      // PWM pin motor 1
-#define SA1  17      // Interrupt pins motor 1
-#define SB1  16      // Interrupt pins motor 1
-
-#define DIR2 32      // Direction pin motor 2
-#define EN2  33      // PWM pin motor 2
-#define SA2  25      // Interrupt pins motor 2
-#define SB2  26      // Interrupt pins motor 2
-*/
 #include <Wire.h>
 
 
-#define DIR1 6
-#define EN1 7
-#define SA1 8
-#define SB1 9
+#define DIR1 9
+#define EN1 8
+#define SA1 7
+#define SB1 6
+
+#define DIR2 18
+#define EN2 19
+#define SA2 20
+#define SB2 21
 
 #define GB_RATIO  53  // Gearbox ratio of the motor. In my case - 53:1.
 #define PPR       6   // Pulse Per Rotation for the encoder. In my case, 3. 
@@ -30,18 +24,20 @@ int   posPrev[NMOTORS]      = {0,0};  // Previous value of the encoder count.
 //volatile int pos_i1 = 0;
 //volatile int pos_i2 = 0;
 
-long  prevT[NMOTORS]      = {0,0};  // Previous time at which a computation was made.
+long  prevT[NMOTORS]    = {0,0};  // Previous time at which a computation was made.
+long prevT_V[NMOTORS]   = {0,0};
+unsigned long previousMillis[NMOTORS] = {0,0};
 
-float vFilt[NMOTORS]      = {0.0,0.0};  // Filtered speed.
-float vPrev[NMOTORS]      = {0.0,0.0};  // Previous speed.
+float vFilt[NMOTORS]    = {0.0,0.0};  // Filtered speed.
+float vPrev[NMOTORS]    = {0.0,0.0};  // Previous speed.
 
 
-const int dir[] = {19,32};  // Direction pins
-const int en[]  = {18,33};  // Enable pins: sets PWM
-const int sa[]  = {17,25};  // Encoder pins SA: interrupt required
-const int sb[]  = {16,26};  // Encoder pins SB: interrupt required
+const int dir[] = {9,18};  // Direction pins
+const int en[]  = {8,19};  // Enable pins: sets PWM
+const int sa[]  = {7,20};  // Encoder pins SA: interrupt required
+const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 
-unsigned long previousMillis = 0;
+
 const long interval = 20000;
 float v[NMOTORS]    = {0.0,0.0};
 long currT          = 0;
@@ -54,28 +50,27 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
 
-  
+  /*
   pinMode(SA1, INPUT);
   pinMode(SB1, INPUT);
   pinMode(EN1, OUTPUT);
   pinMode(DIR1, OUTPUT);
 
-  /*
   pinMode(SA2, INPUT);
   pinMode(SB2, INPUT);
   pinMode(EN2, OUTPUT);
   pinMode(DIR2, OUTPUT);
-*/
+
   analogWrite(EN1, 0);
   digitalWrite(DIR1, 0);
-  //analogWrite(EN2, 0);
-  //digitalWrite(DIR2, 0);
+  analogWrite(EN2, 0);
+  digitalWrite(DIR2, 0);
 
   attachInterrupt(digitalPinToInterrupt(SA1), changeEncoder, CHANGE);
   //attachInterrupt(digitalPinToInterrupt(SA1), encoder_F1, FALLING);
   //attachInterrupt(digitalPinToInterrupt(SA1), encoder_R1, RISING);
-  /*attachInterrupt(digitalPinToInterrupt(SA2), encoder_R2, RISING);
-  attachInterrupt(digitalPinToInterrupt(SA2), encoder_F2, FALLING);
+  attachInterrupt(digitalPinToInterrupt(SA2), encoder_R2, RISING);
+  attachInterrupt(digitalPinToInterrupt(SA2), encoder_F2, FALLING);*/
 
   
   for(int k=0; k < NMOTORS; k++){
@@ -87,17 +82,15 @@ void setup() {
     digitalWrite(dir[k], 0);
   }
 
-  attachInterrupt(digitalPinToInterrupt(sa[0]),encoder_R<0>,RISING);
-  attachInterrupt(digitalPinToInterrupt(sa[1]),encoder_R<1>,RISING);
-  attachInterrupt(digitalPinToInterrupt(sa[0]),encoder_F<0>,FALLING);
-  attachInterrupt(digitalPinToInterrupt(sa[1]),encoder_F<1>,FALLING);*/
+  attachInterrupt(digitalPinToInterrupt(sa[0]),changeEncoder<0>,CHANGE);  // It does not work to define 2 attachInterrupt function (RISING and FALLING), only the last is executed. Thus: CHANGE.
+  attachInterrupt(digitalPinToInterrupt(sa[1]),changeEncoder<1>,CHANGE);
   
   delay(2000);
-  long timeOfStart = micros();
   for(int k = 0; k < NMOTORS; k++){
-    prevT[k] = timeOfStart;
+    prevT[k] = micros();
+    prevT_V[k] = micros();
+    previousMillis[k] = micros();
   }
-  previousMillis = micros();
 
 
   Wire.begin(0x40);             // Defines the card's slave address
@@ -127,11 +120,8 @@ void loop() {
   pos[1] = posi[1];
   interrupts();
 
-  //vFilt[k]    = 0.9984*vFilt[k] + 0.00078*v + 0.00078*vPrev[k];
-  //vPrev[k]    = v;
-
-  if (currentMillis - previousMillis >= interval) {
-    previousMillis = currentMillis;
+  if (currentMillis - previousMillis[0] >= interval) {
+    previousMillis[0] = currentMillis;
     currT     = micros();
     deltaT    = ((float) (currT-prevT[0]))/1.0e6;
     diff      = (posPrev[0] - pos[0]);
@@ -145,7 +135,8 @@ void loop() {
   vPrev[0]    = v[0]; 
 
   int direction = (int) target[1];
-  setMotor(direction,target[0],DIR1,EN1);
+  setMotor(1,200,DIR1,EN1);
+  setMotor(0,200,DIR2,EN2);
   /*
   for(int k = 0; k < NMOTORS; k++){
     setMotor(direction[k],target[k],dir[k],en[k]);
@@ -161,13 +152,17 @@ void loop() {
   Serial.print(" ");
   Serial.print(pos[0]);
   Serial.print(" ");*/
-  Serial.print(v[0]);
+  /*Serial.print(v[0]);
   Serial.print(" ");
   Serial.print(vFilt[0]);
   Serial.print(" ");
-  Serial.print(target[0]);
+  Serial.print(v[1]);
   Serial.print(" ");
-  Serial.print(direction);
+  Serial.print(vFilt[1]);
+  Serial.print(" ");*/
+  Serial.print(pos[0]);
+  Serial.print(" ");
+  Serial.print(pos[1]);
   //Serial.print(" ");
   //Serial.print(diff);
   Serial.println();
@@ -214,26 +209,34 @@ void encoder_F(){
   }
 }*/
 
+template <int i>
 void changeEncoder(){
-  int a = digitalRead(SA1);
+  int a = digitalRead(sa[i]);
   if(a == HIGH){ 
-    encoder_R1();
+    encoder_R(i);
   }
-  else encoder_F1();
+  else encoder_F(i);
 }
 
-
-void encoder_R1(){            // Reminder: if A is triggered Rising but B is already high, it means B first, so going backward. And vice-versa.
-  int b = digitalRead(SB1);  
-  if(b>0) posi[0]--;           
-  else posi[0]++;
-}
-void encoder_F1(){
-  int b = digitalRead(SB1);
-  if(b>0) posi[0]++;
-  else posi[0]--;
+void encoder_R(int index){
+  int b = digitalRead(sb[index]);
+  if(b > 0){
+    posi[index]--;
+  }
+  else{
+    posi[index]++;
+  }
 }
 
+void encoder_F(int index){
+  int b = digitalRead(sb[index]);
+  if(b > 0){
+    posi[index]++;
+  }
+  else{
+    posi[index]--;
+  }
+}
 /*
 void encoder_R2(){
   int b = digitalRead(SB2);  

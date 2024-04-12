@@ -1,10 +1,10 @@
 #include <Wire.h>
 
 // Pin definition
-const int dir[] = {6,18};  // Direction pins
-const int en[]  = {7,19};  // Enable pins: sets PWM
-const int sa[]  = {8,20};  // Encoder pins SA: interrupt required
-const int sb[]  = {9,21};  // Encoder pins SB: interrupt required
+const int dir[] = {9,18};  // Direction pins
+const int en[]  = {8,19};  // Enable pins: sets PWM
+const int sa[]  = {7,20};  // Encoder pins SA: interrupt required
+const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 
 // Motor values.
 #define GB_RATIO  53  // Gearbox ratio of the motor. In my case - 53:1.
@@ -25,11 +25,12 @@ float vPrev[NMOTORS]      = {0.0,0.0};  // Previous speed.
 float v[NMOTORS]          = {0.0,0.0};  // Computed speed (live).
 
 // Control command
-float output[NMOTORS]   = {0.0,0.0};      // Output of the controller
-float target[4]         = {0.0,0,0.0,0};  // Contains the desired motor behaviour.
+float output[NMOTORS] = {0.0,0.0};          // Output of the controller
+float target[4]       = {0.0,0,0.0,0};      // Contains the desired motor behaviour.
+float order[4]        = {0.0,0.0,0.0,0.0};  // For manual functioning. 
 
 unsigned long previousMillis[NMOTORS]  = {0,0};
-const long interval     = 20000;
+const long interval     = 18000;  // INITIAL WORKING VALUE: 20000.
 int diff[NMOTORS]       = {0,0};
 int coeffMotor[NMOTORS] = {1,-1};
 
@@ -39,8 +40,8 @@ unsigned long tempsActuel = 0;
 float previousDir[NMOTORS] = {0,0};
 
 // PID controller values.
-float kp = 10.0;
-float ki = 15.0;
+float kp = 10.0;    // INITIAL WORKING VALUE: 10.
+float ki = 15.0;    // INITIAL WORKING VALUE: 15.
 
 
 void setup() {
@@ -79,7 +80,9 @@ void loop(){
   pos[1] = posi[1];
   interrupts();
 
-  /*
+  // To control manually the commands.
+  
+  float speedReq = 100.0;
   if(tempsActuel < 7000){
     order[0] = 0.0;
     order[1] = 1;
@@ -87,9 +90,9 @@ void loop(){
     order[3] = 0;
   }
   else if(tempsActuel >= 7000 && tempsActuel < 20000){
-    order[0] = 140.0;
+    order[0] = speedReq;
     order[1] = 1;
-    order[2] = 140.0;
+    order[2] = speedReq;
     order[3] = 0;
   }
   else{
@@ -97,14 +100,15 @@ void loop(){
     order[1] = 1;
     order[2] = 0.0;
     order[3] = 0;
-  }*/
-  // ORDER: TO GET FROM I2C. The structure is: {V1,DIR1,V2,DIR2}. Speed in RPM, max 150 (more like 145).
+  }
   
-  /*for(int k = 0; k < 4; k++){
+  for(int k = 0; k < 4; k++){
     target[k] = order[k];
   }
-  tempsActuel = millis();*/
+  tempsActuel = millis();
   
+  // The target is acquired via I2C. See function receiveEvent and in setup().
+
   // Compute velocity & control the motors.
   computeVelocityAndController<0>();
   computeVelocityAndController<1>();
@@ -113,23 +117,28 @@ void loop(){
   // Print block: for debugging purposes.
   Serial.print(vFilt[0]);
   Serial.print(" ");
-  Serial.print(target[0]);
-  //Serial.print(" ");
-  //Serial.print(vFilt[1]);
+  Serial.print(vFilt[1]);
   Serial.print(" ");
-  Serial.print(output[0]);
+  Serial.print(speedReq);
   /*Serial.print(" ");
-  Serial.print(output[1]);
-  Serial.print(" ");
-  Serial.print(eintegral[0]);
-  Serial.print(" ");
-  Serial.print(eintegral[1]);
-  Serial.print(" ");
   Serial.print(e[0]);
   Serial.print(" ");
   Serial.print(e[1]);
   Serial.print(" ");
+  Serial.print(output[0]);
+  Serial.print(" ");
+  Serial.print(output[1]);*/
+  /*Serial.print(" ");
+  Serial.print(eintegral[0]);
+  Serial.print(" ");
+  Serial.print(eintegral[1]);
+  Serial.print(" ");
   Serial.print(tempsActuel);*/
+
+  /*Serial.print(" ");
+  Serial.print(pos[0]);
+  Serial.print(" ");
+  Serial.print(pos[1]);*/
   Serial.println();
 
   // 625µs delay: to maintain correct sampling frequency of 1600 Hz.
@@ -176,7 +185,6 @@ void computeVelocityAndController(){
 
   vFilt[k]    = 0.9806*vFilt[k] + 0.00973*v[k] + 0.0097*vPrev[k]; // Low-pass filter at 5 Hz.
   vPrev[k]    = v[k];
-
 
   // ******************************************** //
   // To deal with the way I'm telling the controller the speed it needs to reach. Instead of sending negative values, I deal automatically with it here.
@@ -225,9 +233,9 @@ void computeVelocityAndController(){
       output[k] = 255;
     }
     int direction = (int) target[2*k+1]; // target is a float list.
-    /*if(u < 0){
-      direction = 1 - direction; // Change direction if need be, without affecting the initial command. Not necessary anymore, due to how I deal with direction earlier.
-    }*/
+    if(u < 0){
+      direction = 1 - direction; // Change direction if need be, without affecting the initial command. This is necessary to deal with potential overshoots.
+    }
 
     // Set command
     output[k] = (int) output[k]; // Casting a float to an int results in a rounding to the lower unit: e.g.: 200.9 -> 200.
