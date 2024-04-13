@@ -9,7 +9,10 @@ const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 // Motor values.
 #define GB_RATIO  53  // Gearbox ratio of the motor. In my case - 53:1.
 #define PPR       6   // Pulse Per Rotation for the encoder. In my case, 3x2 since considering RISING & FALLING. 
-#define NMOTORS   2
+#define NMOTORS   2   // Number of motors to control.
+
+#define TICKSPERTURN  318     // Number of encoder ticks per wheel turn. 6 x 53 (6 ticks per shaft rotation, with the gearbox added to the mix).
+#define DISTPERTURN   0.2513  // Distance per wheel turn in [m]: 2xpix0.04 (wheel diameter: 8cm).
 
 int   pos[NMOTORS]          = {0,0};  // To safely get the value of posi[NMOTORS] within noInterrupt().
 volatile int posi[NMOTORS]  = {0,0};  // Update the encoder count.
@@ -26,7 +29,7 @@ float v[NMOTORS]          = {0.0,0.0};  // Computed speed (live).
 
 // Control command
 float output[NMOTORS] = {0.0,0.0};          // Output of the controller
-float target[4]       = {0.0,0,0.0,0};      // Contains the desired motor behaviour.
+float target[5]       = {0.0,0,0.0,0,0};    // Contains the desired motor behaviour. Received from the GRiSP board, via I2C communication.
 float order[4]        = {0.0,0.0,0.0,0.0};  // For manual functioning. 
 
 unsigned long previousMillis[NMOTORS]  = {0,0};
@@ -34,7 +37,18 @@ const long interval     = 18000;  // INITIAL WORKING VALUE: 20000.
 int diff[NMOTORS]       = {0,0};
 int coeffMotor[NMOTORS] = {1,-1};
 
-// Debugging
+// Counters for the several control modes
+int initialValueTS        = 0; // This is to store the initial counter value for this test.
+int startingTestingSpeed  = 0; // Not the cleanest way: define an int which allows to know if we just started the mode, since all the rest is updated each loop.
+
+int motorTurning          = 0; // This will allow to store the motor that has to be considered, as we can either turn left or right.
+int initialValueT90D      = 0;
+int startingTurning90deg  = 0;
+
+int initialValueTA        = 0;
+int startingTurningAround = 0;
+
+
 float e[NMOTORS]  = {0.0,0.0};
 unsigned long tempsActuel = 0;
 float previousDir[NMOTORS] = {0,0};
@@ -109,9 +123,23 @@ void loop(){
   
   // The target is acquired via I2C. See function receiveEvent and in setup().
 
-  // Compute velocity & control the motors.
-  computeVelocityAndController<0>();
-  computeVelocityAndController<1>();
+  // Compute velocity & control the motors. Depending on the fifth argument of target, the desired behaviour varies.
+  if(target[4] == 0){
+    computeVelocityAndController<0>();
+    computeVelocityAndController<1>();
+  } else if (target[4] == 1){
+    testingTheNewSpeed();
+  } else if(target[4] == 2){
+    turning90degrees();
+  } else if(target[4] == 3){
+    turningAround();
+  } else {
+    Serial.println("Invalid order for the crate-on-wheels");
+    for(int k = 0; k < NMOTORS; k++){
+      setMotor(0, k, dir[k], en[k]);
+    }
+  }
+  
 
 
   // Print block: for debugging purposes.
@@ -142,7 +170,7 @@ void loop(){
   Serial.println();
 
   // 625µs delay: to maintain correct sampling frequency of 1600 Hz.
-  // 6 ticks per turn x 53 (Gearbox) x 2.5 RPS (max) = 795 Hz. x2 to avoid aliasing (Shannon's theorem) : ~1600 Hz. 
+  // 6 ticks per turn x 53 (Gearbox) x 2.5 RPS (max) = 795 Hz. x2 to avoid aliasing (Shannon's theorem) : ~1600 Hz at most.
   delayMicroseconds(625);
 }
 
@@ -162,10 +190,98 @@ void receiveEvent(int howMany)
 
 
 // *********************************************** //
+// *************** CONTROL MODES ***************** //
+// *********************************************** //
+
+// To test the new speed : go forward for 5m, then backward over the same distance. Then, stop.
+testingTheNewSpeed(){
+  if(!startingTestingSpeed){
+    startingTestingSpeed = 1;
+    initialValueTS = fabs(pos[0]);
+  } else if(startingTestingSpeed){
+    if(fabs(initialValueTS - fabs(pos[0])) < 19.89 * TICKSPERTURN && target[1] == 1){ // Full of fabs() to ensure a count going up, no matter the case.
+      computeVelocityAndController<0>();
+      computeVelocityAndController<1>();
+    } else if(fabs(initialValueTS - fabs(pos[0])) >= 19.89 * TICKSPERTURN && target[1] == 1){ // We have gone over 5m. Now, come back.
+      initialValueTS = fabs(pos[0]);
+      for(int k = 0; k < NMOTORS; k++){ // Stop the crate.
+        setMotor(0, k, dir[k], en[k]);
+      }
+      target[1] = 0;  // Change direction.
+      target[3] = 1;
+      computeVelocityAndController<0>();  // Control again.
+      computeVelocityAndController<1>()
+    } else if(fabs(initialValueTS - fabs(pos[0])) < 19.89 * TICKSPERTURN && target[1] == 0){
+      computeVelocityAndController<0>();
+      computeVelocityAndController<1>();
+    } else {
+      Serial.println("Testing the new velocity: test done!");
+      for(int k = 0; k < 5; k++){
+        target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
+      }     
+      startingTestingSpeed = 0;
+    }
+  } else {
+    Serial.println("Invalid value for startingTestingSpeed.");
+  }
+}
+
+// To accomplish a 90° turn.
+turning90degrees(){
+  int DISTANCE_TO_COMPUTE = 1000; // To remove once I've computed the correct distance to travel.
+  if(!startingTurning90deg){
+    startingTurning90deg = 1;
+    if(target[0] > 0){
+      motorTurning = 0;
+    } else {
+      motorTurning = 1;
+    }
+    initialValueT90D = fabs(pos[motorTurning]);
+  } else if(startingTurning90deg){
+    if(fabs(initialValueT90D - fabs(pos[motorTurning])) < DISTANCE_TO_COMPUTE){ 
+      computeVelocityAndController<0>();
+      computeVelocityAndController<1>();
+    } else {
+      Serial.println("Turning by 90 degrees: done!");
+      for(int k = 0; k < 5; k++){
+        target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
+      }     
+      startingTurning90deg = 0;
+    }
+  } else {
+    Serial.println("Invalid value for startingTurning90deg.");
+  }
+}
+
+// To accomplish a full rotation on itself.
+turningAround(){
+  int DISTANCE_TO_COMPUTE = 1000; // To remove once I've computed the correct distance to travel.
+  if(!startingTurningAround){
+    startingTurningAround = 1;
+    initialValueTA = fabs(pos[0]); // It doesn't really matter which motor we use to check. Once one of the wheel did its job, we suppose the crate did a full on rotation.
+    // This can be improved upon if I realise it never turns fully around. 
+  } else if(startingTurningAround){
+    if(fabs(initialValueTA - fabs(pos[motorTurning])) < DISTANCE_TO_COMPUTE){ 
+      computeVelocityAndController<0>();
+      computeVelocityAndController<1>();
+    } else {
+      Serial.println("Turning on itself: done!");
+      for(int k = 0; k < 5; k++){
+        target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
+      }     
+      startingTurningAround = 0;
+    }
+  } else {
+    Serial.println("Invalid value for startingTurningAround.");
+  }
+}
+
+
+// *********************************************** //
 // ************* VELOCITY & CONTROL ************** //
 // *********************************************** //
 
-template <int k> // I can use prevT[k], posPrev[k], target[k], pos[k] et on s'en fout d'index.
+template <int k> // I can use prevT[k], posPrev[k], target[k], pos[k]. No need of an index, thanks to template.
 void computeVelocityAndController(){
   unsigned long currentMillis = micros(); 
   float deltaT  = ((float) (currentMillis - prevT[k]))/1.0e6;
