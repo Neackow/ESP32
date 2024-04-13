@@ -194,7 +194,7 @@ void receiveEvent(int howMany)
 // *********************************************** //
 
 // To test the new speed : go forward for 5m, then backward over the same distance. Then, stop.
-testingTheNewSpeed(){
+void testingTheNewSpeed(){
   if(!startingTestingSpeed){
     startingTestingSpeed = 1;
     initialValueTS = fabs(pos[0]);
@@ -210,7 +210,7 @@ testingTheNewSpeed(){
       target[1] = 0;  // Change direction.
       target[3] = 1;
       computeVelocityAndController<0>();  // Control again.
-      computeVelocityAndController<1>()
+      computeVelocityAndController<1>();
     } else if(fabs(initialValueTS - fabs(pos[0])) < 19.89 * TICKSPERTURN && target[1] == 0){
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
@@ -227,7 +227,7 @@ testingTheNewSpeed(){
 }
 
 // To accomplish a 90° turn.
-turning90degrees(){
+void turning90degrees(){
   int DISTANCE_TO_COMPUTE = 1000; // To remove once I've computed the correct distance to travel.
   if(!startingTurning90deg){
     startingTurning90deg = 1;
@@ -254,7 +254,7 @@ turning90degrees(){
 }
 
 // To accomplish a full rotation on itself.
-turningAround(){
+void turningAround(){
   int DISTANCE_TO_COMPUTE = 1000; // To remove once I've computed the correct distance to travel.
   if(!startingTurningAround){
     startingTurningAround = 1;
