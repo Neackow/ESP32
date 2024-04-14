@@ -13,6 +13,7 @@ const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 
 #define TICKSPERTURN  318     // Number of encoder ticks per wheel turn. 6 x 53 (6 ticks per shaft rotation, with the gearbox added to the mix).
 #define DISTPERTURN   0.2513  // Distance per wheel turn in [m]: 2xpix0.04 (wheel diameter: 8cm).
+#define NUM_TURN_TEST 7.9586  // To accomplish 2 [m], we need this number of turns due to the wheel diameter.  
 
 int   pos[NMOTORS]          = {0,0};  // To safely get the value of posi[NMOTORS] within noInterrupt().
 volatile int posi[NMOTORS]  = {0,0};  // Update the encoder count.
@@ -121,26 +122,29 @@ void loop(){
   }
   tempsActuel = millis();
   
-  // The target is acquired via I2C. See function receiveEvent and in setup().
+  // The target is acquired via I2C. See function receiveEvent() and in setup().
 
   // Compute velocity & control the motors. Depending on the fifth argument of target, the desired behaviour varies.
   if(target[4] == 0){
+    // In the normal behaviour, simply apply the commands.
     computeVelocityAndController<0>();
     computeVelocityAndController<1>();
   } else if (target[4] == 1){
+    // Test the newly applied speed.
     testingTheNewSpeed();
   } else if(target[4] == 2){
+    // Control mode which will make the crate turn by 90°.
     turning90degrees();
   } else if(target[4] == 3){
+    // Control mode which will make the crate spin on itself.
     turningAround();
   } else {
-    Serial.println("Invalid order for the crate-on-wheels");
+    Serial.println("Invalid order for the crate-on-wheels.");
     for(int k = 0; k < NMOTORS; k++){
-      setMotor(0, k, dir[k], en[k]);
+      setMotor(0, 1-k, dir[k], en[k]);
     }
   }
   
-
 
   // Print block: for debugging purposes.
   Serial.print(vFilt[0]);
@@ -193,25 +197,24 @@ void receiveEvent(int howMany)
 // *************** CONTROL MODES ***************** //
 // *********************************************** //
 
-// To test the new speed : go forward for 5m, then backward over the same distance. Then, stop.
+// To test the new speed : go forward for 2 [m], then backward over the same distance. Then, stop.
 void testingTheNewSpeed(){
   if(!startingTestingSpeed){
     startingTestingSpeed = 1;
     initialValueTS = fabs(pos[0]);
   } else if(startingTestingSpeed){
-    if(fabs(initialValueTS - fabs(pos[0])) < 19.89 * TICKSPERTURN && target[1] == 1){ // Full of fabs() to ensure a count going up, no matter the case.
+    // NUM_TURN_TEST [turns] comes from the fact that we want 2 [m] and that 1 turn = 0.2513 [m].
+    if(fabs(initialValueTS - fabs(pos[0])) < NUM_TURN_TEST * TICKSPERTURN && target[1] == 1){ // Full of fabs() to ensure a count going up, no matter the case.
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
-    } else if(fabs(initialValueTS - fabs(pos[0])) >= 19.89 * TICKSPERTURN && target[1] == 1){ // We have gone over 5m. Now, come back.
+    } else if(fabs(initialValueTS - fabs(pos[0])) >= NUM_TURN_TEST * TICKSPERTURN && target[1] == 1){ // We have gone over 5 [m]. Now, come back.
       initialValueTS = fabs(pos[0]);
       for(int k = 0; k < NMOTORS; k++){ // Stop the crate.
-        setMotor(0, k, dir[k], en[k]);
+        setMotor(0, 1-k, dir[k], en[k]); 
       }
       target[1] = 0;  // Change direction.
       target[3] = 1;
-      computeVelocityAndController<0>();  // Control again.
-      computeVelocityAndController<1>();
-    } else if(fabs(initialValueTS - fabs(pos[0])) < 19.89 * TICKSPERTURN && target[1] == 0){
+    } else if(fabs(initialValueTS - fabs(pos[0])) < NUM_TURN_TEST * TICKSPERTURN && target[1] == 0){
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
     } else {
@@ -258,10 +261,10 @@ void turningAround(){
   int DISTANCE_TO_COMPUTE = 1000; // To remove once I've computed the correct distance to travel.
   if(!startingTurningAround){
     startingTurningAround = 1;
-    initialValueTA = fabs(pos[0]); // It doesn't really matter which motor we use to check. Once one of the wheel did its job, we suppose the crate did a full on rotation.
+    initialValueTA = fabs(pos[0]); // It doesn't really matter which motor we use to check. Once one of the wheel did its job, we suppose the crate did a full rotation.
     // This can be improved upon if I realise it never turns fully around. 
   } else if(startingTurningAround){
-    if(fabs(initialValueTA - fabs(pos[motorTurning])) < DISTANCE_TO_COMPUTE){ 
+    if(fabs(initialValueTA - fabs(pos[0])) < DISTANCE_TO_COMPUTE){ 
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
     } else {
