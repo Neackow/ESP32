@@ -1,12 +1,13 @@
 #include <Wire.h>
 
-// Pin definition
+// ********** <Pin definition> **********
 const int dir[] = {9,18};  // Direction pins
 const int en[]  = {8,19};  // Enable pins: sets PWM
 const int sa[]  = {7,20};  // Encoder pins SA: interrupt required
 const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
+// ********** </Pin definition> **********
 
-// Motor values.
+// ********** <Motor values> **********
 #define GB_RATIO  53  // Gearbox ratio of the motor. In my case - 53:1.
 #define PPR       6   // Pulse Per Rotation for the encoder. In my case, 3x2 since considering RISING & FALLING. 
 #define NMOTORS   2   // Number of motors to control.
@@ -14,7 +15,9 @@ const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 #define TICKSPERTURN  318     // Number of encoder ticks per wheel turn. 6 x 53 (6 ticks per shaft rotation, with the gearbox added to the mix).
 #define DISTPERTURN   0.2513  // Distance per wheel turn in [m]: 2xpix0.04 (wheel diameter: 8cm).
 #define NUM_TURN_TEST 7.9586  // To accomplish 2 [m], we need this number of turns due to the wheel diameter.  
+// ********** </Motor values> **********
 
+// ********** <Controller variables> **********
 int   pos[NMOTORS]          = {0,0};  // To safely get the value of posi[NMOTORS] within noInterrupt().
 volatile int posi[NMOTORS]  = {0,0};  // Update the encoder count.
 int   posPrev[NMOTORS]      = {0,0};  // Previous value of the encoder count.
@@ -27,18 +30,22 @@ float eintegral[NMOTORS]  = {0.0,0.0};  // Store the evolution of the integral e
 float vFilt[NMOTORS]      = {0.0,0.0};  // Filtered speed.
 float vPrev[NMOTORS]      = {0.0,0.0};  // Previous speed.
 float v[NMOTORS]          = {0.0,0.0};  // Computed speed (live).
+float e[NMOTORS]          = {0.0,0.0};  // Current error.
+int diff[NMOTORS]         = {0,0};      // Used to store the counter difference.
+const long interval       = 18000;      // INITIAL WORKING VALUE: 20000. Used to filter in the controller.
 
 // Control command
 float output[NMOTORS] = {0.0,0.0};          // Output of the controller
 float target[5]       = {0.0,0,0.0,0,0};    // Contains the desired motor behaviour. Received from the GRiSP board, via I2C communication.
 float order[4]        = {0.0,0.0,0.0,0.0};  // For manual functioning. 
 
-unsigned long previousMillis[NMOTORS]  = {0,0};
-const long interval     = 18000;  // INITIAL WORKING VALUE: 20000.
-int diff[NMOTORS]       = {0,0};
-int coeffMotor[NMOTORS] = {1,-1};
+unsigned long previousMillis[NMOTORS]  = {0,0}; // Store previous time.
+int coeffMotor[NMOTORS] = {1,-1};               // To deal with motor direction differences.
+unsigned long tempsActuel = 0;                  // Used in manual command.
+float previousDir[NMOTORS] = {0,0};             // Used for hard reset of the integral term.
+// ********** </Controller variables> **********
 
-// Counters for the several control modes
+// ********** <Variables for the control modes> **********
 int initialValueTS        = 0; // This is to store the initial counter value for this test.
 int startingTestingSpeed  = 0; // Not the cleanest way: define an int which allows to know if we just started the mode, since all the rest is updated each loop.
 
@@ -49,18 +56,17 @@ int startingTurning90deg  = 0;
 int initialValueTA        = 0;
 int startingTurningAround = 0;
 
+int available             = 1; // By default, the controller says that it is available to receive more commands.
+// ********** </Variables for the control modes> **********
 
-float e[NMOTORS]  = {0.0,0.0};
-unsigned long tempsActuel = 0;
-float previousDir[NMOTORS] = {0,0};
-
-// PID controller values.
+// ********** <PID constants> **********
 float kp = 10.0;    // INITIAL WORKING VALUE: 10.
 float ki = 15.0;    // INITIAL WORKING VALUE: 15.
+// ********** </PID constants> **********
 
 
 void setup() {
-  Serial.begin(9600); //115200 is another option.
+  Serial.begin(9600);
 
   for(int k = 0; k < NMOTORS; k++){
     pinMode(dir[k],OUTPUT);
@@ -75,7 +81,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(sa[1]),changeEncoder<1>,CHANGE);
 
   // Allows me to have the time to correctly setup the rest of the robot.
-  delay(2000);
+  delay(1000);
 
   for(int k = 0; k < NMOTORS; k++){
     prevT[k] = micros();
@@ -83,8 +89,9 @@ void setup() {
     previousMillis[k] = micros();
   }
   
-  Wire.begin(0x40);             // Defines the card's slave address
-  Wire.onReceive(receiveEvent); // To receive the command.
+  Wire.begin(0x40);               // Defines the board's slave address.
+  Wire.onReceive(receiveMessage); // To receive the command.
+  Wire.onRequest(sendMessage);    // To answer when the master wants to read.
 }
 
 
@@ -96,7 +103,6 @@ void loop(){
   interrupts();
 
   // To control manually the commands.
-  
   float speedReq = 100.0;
   if(tempsActuel < 7000){
     order[0] = 0.0;
@@ -183,13 +189,19 @@ void loop(){
 // ************* I2C COMMUNICATION *************** //
 // *********************************************** //
 
-void receiveEvent(int howMany) 
+void receiveMessage(int howMany) 
 {
   for(int i=0; i < howMany; i++){
     target[i] = Wire.read();
     //Serial.println(target[i]);
   }
   //Serial.println();
+}
+
+void sendMessage()
+{
+  byte message = byte(available);
+  Wire.write(message);
 }
 
 
@@ -200,6 +212,7 @@ void receiveEvent(int howMany)
 // To test the new speed : go forward for 2 [m], then backward over the same distance. Then, stop.
 void testingTheNewSpeed(){
   if(!startingTestingSpeed){
+    available = 0; // We say that we are no longer available.
     startingTestingSpeed = 1;
     initialValueTS = fabs(pos[0]);
   } else if(startingTestingSpeed){
@@ -223,6 +236,7 @@ void testingTheNewSpeed(){
         target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
       }     
       startingTestingSpeed = 0;
+      available = 1; // We are available again for new commands.
     }
   } else {
     Serial.println("Invalid value for startingTestingSpeed.");
@@ -233,6 +247,7 @@ void testingTheNewSpeed(){
 void turning90degrees(){
   int DISTANCE_TO_COMPUTE = 1000; // To remove once I've computed the correct distance to travel.
   if(!startingTurning90deg){
+    available = 0;
     startingTurning90deg = 1;
     if(target[0] > 0){
       motorTurning = 0;
@@ -250,6 +265,7 @@ void turning90degrees(){
         target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
       }     
       startingTurning90deg = 0;
+      available = 1;
     }
   } else {
     Serial.println("Invalid value for startingTurning90deg.");
@@ -260,6 +276,7 @@ void turning90degrees(){
 void turningAround(){
   int DISTANCE_TO_COMPUTE = 1000; // To remove once I've computed the correct distance to travel.
   if(!startingTurningAround){
+    available = 0;
     startingTurningAround = 1;
     initialValueTA = fabs(pos[0]); // It doesn't really matter which motor we use to check. Once one of the wheel did its job, we suppose the crate did a full rotation.
     // This can be improved upon if I realise it never turns fully around. 
@@ -273,6 +290,7 @@ void turningAround(){
         target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
       }     
       startingTurningAround = 0;
+      available = 1;
     }
   } else {
     Serial.println("Invalid value for startingTurningAround.");
