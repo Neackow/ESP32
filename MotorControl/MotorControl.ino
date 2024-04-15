@@ -36,13 +36,13 @@ const long interval       = 18000;      // INITIAL WORKING VALUE: 20000. Used to
 
 // Control command
 float output[NMOTORS] = {0.0,0.0};          // Output of the controller
-float target[5]       = {0.0,0,0.0,0,0};    // Contains the desired motor behaviour. Received from the GRiSP board, via I2C communication.
+int target[5]         = {0.0,0,0.0,0,0};    // Contains the desired motor behaviour. Received from the GRiSP board, via I2C communication.
 float order[4]        = {0.0,0.0,0.0,0.0};  // For manual functioning. 
 
-unsigned long previousMillis[NMOTORS]  = {0,0}; // Store previous time.
-int coeffMotor[NMOTORS] = {1,-1};               // To deal with motor direction differences.
-unsigned long tempsActuel = 0;                  // Used in manual command.
-float previousDir[NMOTORS] = {0,0};             // Used for hard reset of the integral term.
+unsigned long previousMillis[NMOTORS] = {0,0}; // Store previous time.
+int coeffMotor[NMOTORS]   = {1,-1};            // To deal with motor direction differences.
+unsigned long tempsActuel = 0;                 // Used in manual command.
+int previousDir[NMOTORS]  = {0,0};             // Used for hard reset of the integral term.
 // ********** </Controller variables> **********
 
 // ********** <Variables for the control modes> **********
@@ -325,14 +325,14 @@ void computeVelocityAndController(){
 
   // ******************************************** //
   // To deal with the way I'm telling the controller the speed it needs to reach. Instead of sending negative values, I deal automatically with it here.
-  int coeffTargetVel = 1;
+  float coeffTargetVel = 1.0;
   if(k == 0){
     if(target[2*k+1] == 0){ // If MOTOR1 : POSITIVE SPEED when DIR1 and NEGATIVE SPEED when DIR0.
-      coeffTargetVel = -1;
+      coeffTargetVel = -1.0;
     }
   } else {
     if(target[2*k+1] == 1){ // If MOTOR2 : POSITIVE SPEED when DIR0 and NEGATIVE SPEED when DIR1.
-      coeffTargetVel = -1;
+      coeffTargetVel = -1.0;
     }
   }
   // ******************************************** //
@@ -369,7 +369,7 @@ void computeVelocityAndController(){
     if(output[k] > 255){
       output[k] = 255;
     }
-    int direction = (int) target[2*k+1]; // target is a float list.
+    int direction = target[2*k+1]; // target is already in int.
     if(u < 0){
       direction = 1 - direction; // Change direction if need be, without affecting the initial command. This is necessary to deal with potential overshoots.
     }

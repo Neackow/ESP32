@@ -6,7 +6,7 @@ grisp_i2c:transfer(I2C1, [{write, 16#40, 1, List_data}]).
 Data = term_to_binary([1,2,3,4]).
 test = lists:sublist(binary_to_list(term_to_binary([1,2,3,4])),3,8).
 
-f(), Data = [140,1,140,0], List_data = lists:flatten(lists:map(fun(X) -> X end, lists:map(fun(X) -> lists:sublist(binary_to_list(term_to_binary(X)),3,8) end, Data))).
+f(), Data = [140,1,140,0,3], List_data = lists:flatten(lists:map(fun(X) -> X end, lists:map(fun(X) -> lists:sublist(binary_to_list(term_to_binary(X)),3,8) end, Data))).
 I2C1 = grisp_i2c:open(i2c1), grisp_i2c:transfer(I2C1, [{write, 16#40, 1, List_data}]).
 
 Data = [2000,3000,4000,5000].
@@ -39,3 +39,8 @@ rpc:call(sensor_fusion@nav_2, sensor_fusion, stop_all, []).
 
 
 rpc:call(sensor_fusion@nav_2, lists, sort, [[a,e,f,t,h,s,a]]). % TO TEST IF RPC:CALL WORKS.
+
+
+% FOR THE READ.
+I2C1 = grisp_i2c:open(i2c1), Message = grisp_i2c:transfer(I2C1, [{read, 16#40, 1, 1}]).
+Available = lists:nth(1, binary_to_list(lists:nth(1, Message))).
