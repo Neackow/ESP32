@@ -36,7 +36,7 @@ const long interval       = 18000;      // INITIAL WORKING VALUE: 20000. Used to
 
 // Control command
 float output[NMOTORS] = {0.0,0.0};          // Output of the controller
-int target[5]         = {0.0,0,0.0,0,0};    // Contains the desired motor behaviour. Received from the GRiSP board, via I2C communication.
+int target[5]         = {0,0,0,0,0};        // Contains the desired motor behaviour. Received from the GRiSP board, via I2C communication.
 float order[4]        = {0.0,0.0,0.0,0.0};  // For manual functioning. 
 
 unsigned long previousMillis[NMOTORS] = {0,0}; // Store previous time.
