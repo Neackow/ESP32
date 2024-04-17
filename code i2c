@@ -39,6 +39,7 @@ rpc:call(sensor_fusion@nav_2, sensor_fusion, stop_all, []).
 
 
 rpc:call(sensor_fusion@nav_2, lists, sort, [[a,e,f,t,h,s,a]]). % TO TEST IF RPC:CALL WORKS.
+rpc:call(sensor_fusion@orderCrate, hera_sendOrder, set_state_crate, [testRPC]).
 
 
 % FOR THE READ.

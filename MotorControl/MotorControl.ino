@@ -103,7 +103,7 @@ void loop(){
   interrupts();
 
   // To control manually the commands.
-  float speedReq = 100.0;
+  float speedReq = 80.0;
   if(tempsActuel < 7000){
     order[0] = 0.0;
     order[1] = 1;
@@ -157,23 +157,23 @@ void loop(){
   Serial.print(" ");
   Serial.print(vFilt[1]);
   Serial.print(" ");
-  Serial.print(speedReq);
+  Serial.print(output[0]);
+  Serial.print(" ");
+  Serial.print(output[1]);
   /*Serial.print(" ");
+  Serial.print(speedReq);
+  Serial.print(" ");
   Serial.print(e[0]);
   Serial.print(" ");
   Serial.print(e[1]);
   Serial.print(" ");
-  Serial.print(output[0]);
-  Serial.print(" ");
-  Serial.print(output[1]);*/
-  /*Serial.print(" ");
   Serial.print(eintegral[0]);
   Serial.print(" ");
   Serial.print(eintegral[1]);
   Serial.print(" ");
-  Serial.print(tempsActuel);*/
-
-  /*Serial.print(" ");
+  Serial.print(tempsActuel);
+  
+  Serial.print(" ");
   Serial.print(pos[0]);
   Serial.print(" ");
   Serial.print(pos[1]);*/
@@ -341,48 +341,44 @@ void computeVelocityAndController(){
   e[k] = targetVel - vFilt[k];
 
   // Main control loop.
-  if(fabs(targetVel) > 90.0){
-    
-    // ******************************************** //
-    // Hard reset of the integral term when switching direction.
-    if(previousDir[k] != target[2*k+1]){
-      eintegral[k] = 0.0;
-    }
-    // ******************************************** //
-    
-    eintegral[k] += e[k]*deltaT;
-
-    float limit = 70.0;
-    if(eintegral[k] > limit){
-      eintegral[k] = limit;
-    }
-    float integralTerm = ki*eintegral[k];
-
-    if(integralTerm > ki*limit){ // So that it automatically adapts itself when I want to change boundary.
-      integralTerm = ki*limit;
-    }
-
-    // Compute the necessary command to reach the desired speed;
-    float u = kp*e[k] + integralTerm; 
-
-    output[k] = fabs(u);
-    if(output[k] > 255){
-      output[k] = 255;
-    }
-    int direction = target[2*k+1]; // target is already in int.
-    if(u < 0){
-      direction = 1 - direction; // Change direction if need be, without affecting the initial command. This is necessary to deal with potential overshoots.
-    }
-
-    // Set command
-    output[k] = (int) output[k]; // Casting a float to an int results in a rounding to the lower unit: e.g.: 200.9 -> 200.
-
-    // Format: setMotor(direction, targetSpeed, directionPin, enablePin);
-    setMotor(direction, output[k], dir[k], en[k]);
+  
+  // ******************************************** //
+  // Hard reset of the integral term when switching direction.
+  if(previousDir[k] != target[2*k+1]){
+    eintegral[k] = 0.0;
   }
-  else {
-    setMotor(target[2*k+1], 0, dir[k], en[k]);
+  // ******************************************** //
+  
+  eintegral[k] += e[k]*deltaT;
+
+  float limit = 70.0;
+  if(eintegral[k] > limit){
+    eintegral[k] = limit;
   }
+  float integralTerm = ki*eintegral[k];
+
+  if(integralTerm > ki*limit){ // So that it automatically adapts itself when I want to change boundary.
+    integralTerm = ki*limit;
+  }
+
+  // Compute the necessary command to reach the desired speed;
+  float u = kp*e[k] + integralTerm; 
+
+  output[k] = fabs(u);
+  if(output[k] > 255){
+    output[k] = 255;
+  }
+  int direction = target[2*k+1]; // target is already in int.
+  if(u < 0){
+    direction = 1 - direction; // Change direction if need be, without affecting the initial command. This is necessary to deal with potential overshoots.
+  }
+
+  // Set command
+  output[k] = (int) output[k]; // Casting a float to an int results in a rounding to the lower unit: e.g.: 200.9 -> 200.
+
+  // Format: setMotor(direction, targetSpeed, directionPin, enablePin);
+  setMotor(direction, output[k], dir[k], en[k]);
+
   // End the loop, update the error.
   previousDir[k] = target[2*k+1];
   eprev[k] = e[k];
