@@ -15,6 +15,7 @@ const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 #define TICKSPERTURN  318     // Number of encoder ticks per wheel turn. 6 x 53 (6 ticks per shaft rotation, with the gearbox added to the mix).
 #define DISTPERTURN   0.2513  // Distance per wheel turn in [m]: 2xpix0.04 (wheel diameter: 8cm).
 #define NUM_TURN_TEST 7.9586  // To accomplish 2 [m], we need this number of turns due to the wheel diameter.  
+#define TURN_CRATE    1.78125 // Number of wheel turns required to turn the crate by 90°, in either direction, and also on itself.
 // ********** </Motor values> **********
 
 // ********** <Controller variables> **********
@@ -37,7 +38,7 @@ const long interval       = 18000;      // INITIAL WORKING VALUE: 20000. Used to
 // Control command
 float output[NMOTORS] = {0.0,0.0};          // Output of the controller
 int target[5]         = {0,0,0,0,0};        // Contains the desired motor behaviour. Received from the GRiSP board, via I2C communication.
-float order[4]        = {0.0,0.0,0.0,0.0};  // For manual functioning. 
+int order[5]          = {0,0,0,0,0};        // For manual functioning. 
 
 unsigned long previousMillis[NMOTORS] = {0,0}; // Store previous time.
 int coeffMotor[NMOTORS]   = {1,-1};            // To deal with motor direction differences.
@@ -102,25 +103,31 @@ void loop(){
   pos[1] = posi[1];
   interrupts();
 
-  // To control manually the commands.
-  float speedReq = 80.0;
+  // To control manually the commands. PROBLÈME : COMMANDE RESTE À UNE VALEUR BIZARRE LORSQUE 0.
+  //80 est un peu faible. Et très lent.
+  //90 aussi est un peu faible. Mais c'est mieux.
+  //100 est une bonne vitesse. Pas trop rapide, et au-dessus
+  int speedReq = 140;
   if(tempsActuel < 7000){
-    order[0] = 0.0;
+    order[0] = 0;
     order[1] = 1;
-    order[2] = 0.0;
+    order[2] = 0;
     order[3] = 0;
+    //order[4] = 0;
   }
   else if(tempsActuel >= 7000 && tempsActuel < 20000){
     order[0] = speedReq;
     order[1] = 1;
     order[2] = speedReq;
     order[3] = 0;
+    //order[4] = 0;
   }
   else{
-    order[0] = 0.0;
+    order[0] = 0;
     order[1] = 1;
-    order[2] = 0.0;
+    order[2] = 0;
     order[3] = 0;
+    //order[4] = 0;
   }
   
   for(int k = 0; k < 4; k++){
@@ -160,6 +167,12 @@ void loop(){
   Serial.print(output[0]);
   Serial.print(" ");
   Serial.print(output[1]);
+  Serial.print(" ");
+  Serial.print(tempsActuel);
+  Serial.print(" ");
+  Serial.print(eintegral[0]);
+  Serial.print(" ");
+  Serial.print(eintegral[1]);
   /*Serial.print(" ");
   Serial.print(speedReq);
   Serial.print(" ");
@@ -245,7 +258,6 @@ void testingTheNewSpeed(){
 
 // To accomplish a 90° turn.
 void turning90degrees(){
-  int DISTANCE_TO_COMPUTE = 1000; // To remove once I've computed the correct distance to travel.
   if(!startingTurning90deg){
     available = 0;
     startingTurning90deg = 1;
@@ -256,7 +268,7 @@ void turning90degrees(){
     }
     initialValueT90D = fabs(pos[motorTurning]);
   } else if(startingTurning90deg){
-    if(fabs(initialValueT90D - fabs(pos[motorTurning])) < DISTANCE_TO_COMPUTE){ 
+    if(fabs(initialValueT90D - fabs(pos[motorTurning])) < TURN_CRATE * TICKS_PER_TURN){ 
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
     } else {
@@ -274,14 +286,13 @@ void turning90degrees(){
 
 // To accomplish a full rotation on itself.
 void turningAround(){
-  int DISTANCE_TO_COMPUTE = 1000; // To remove once I've computed the correct distance to travel.
   if(!startingTurningAround){
     available = 0;
     startingTurningAround = 1;
     initialValueTA = fabs(pos[0]); // It doesn't really matter which motor we use to check. Once one of the wheel did its job, we suppose the crate did a full rotation.
     // This can be improved upon if I realise it never turns fully around. 
   } else if(startingTurningAround){
-    if(fabs(initialValueTA - fabs(pos[0])) < DISTANCE_TO_COMPUTE){ 
+    if(fabs(initialValueTA - fabs(pos[0])) < TURN_CRATE * TICKS_PER_TURN){ 
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
     } else {
@@ -341,43 +352,49 @@ void computeVelocityAndController(){
   e[k] = targetVel - vFilt[k];
 
   // Main control loop.
+  if(fabs(targetVel) > 90.0){
+    
+    // ******************************************** //
+    // Hard reset of the integral term when switching direction.
+    if(previousDir[k] != target[2*k+1]){
+      eintegral[k] = 0.0;
+    }
+    // ******************************************** //
+    
+    eintegral[k] += e[k]*deltaT;
+
+    float limit = 70.0;
+    if(eintegral[k] > limit){
+      eintegral[k] = limit;
+    }
+    float integralTerm = ki*eintegral[k];
+
+    if(integralTerm > ki*limit){ // So that it automatically adapts itself when I want to change boundary.
+      integralTerm = ki*limit;
+    }
+
+    // Compute the necessary command to reach the desired speed;
+    float u = kp*e[k] + integralTerm; 
+
+    output[k] = fabs(u);
+    if(output[k] > 255){
+      output[k] = 255;
+    }
+    int direction = target[2*k+1]; // target is already in int.
+    if(u < 0){
+      direction = 1 - direction; // Change direction if need be, without affecting the initial command. This is necessary to deal with potential overshoots.
+    }
+
+    // Set command
+    output[k] = (int) output[k]; // Casting a float to an int results in a rounding to the lower unit: e.g.: 200.9 -> 200.
+
+    // Format: setMotor(direction, targetSpeed, directionPin, enablePin);
+    setMotor(direction, output[k], dir[k], en[k]);
+  }
+  else {
+    setMotor(target[2*k+1], 0, dir[k], en[k]);
+  }
   
-  // ******************************************** //
-  // Hard reset of the integral term when switching direction.
-  if(previousDir[k] != target[2*k+1]){
-    eintegral[k] = 0.0;
-  }
-  // ******************************************** //
-  
-  eintegral[k] += e[k]*deltaT;
-
-  float limit = 70.0;
-  if(eintegral[k] > limit){
-    eintegral[k] = limit;
-  }
-  float integralTerm = ki*eintegral[k];
-
-  if(integralTerm > ki*limit){ // So that it automatically adapts itself when I want to change boundary.
-    integralTerm = ki*limit;
-  }
-
-  // Compute the necessary command to reach the desired speed;
-  float u = kp*e[k] + integralTerm; 
-
-  output[k] = fabs(u);
-  if(output[k] > 255){
-    output[k] = 255;
-  }
-  int direction = target[2*k+1]; // target is already in int.
-  if(u < 0){
-    direction = 1 - direction; // Change direction if need be, without affecting the initial command. This is necessary to deal with potential overshoots.
-  }
-
-  // Set command
-  output[k] = (int) output[k]; // Casting a float to an int results in a rounding to the lower unit: e.g.: 200.9 -> 200.
-
-  // Format: setMotor(direction, targetSpeed, directionPin, enablePin);
-  setMotor(direction, output[k], dir[k], en[k]);
 
   // End the loop, update the error.
   previousDir[k] = target[2*k+1];
