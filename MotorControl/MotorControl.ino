@@ -107,7 +107,7 @@ void loop(){
   //80 est un peu faible. Et très lent.
   //90 aussi est un peu faible. Mais c'est mieux.
   //100 est une bonne vitesse. Pas trop rapide, et au-dessus
-  int speedReq = 140;
+  /*int speedReq = 140;
   if(tempsActuel < 7000){
     order[0] = 0;
     order[1] = 1;
@@ -133,7 +133,7 @@ void loop(){
   for(int k = 0; k < 4; k++){
     target[k] = order[k];
   }
-  tempsActuel = millis();
+  tempsActuel = millis();*/
   
   // The target is acquired via I2C. See function receiveEvent() and in setup().
 
@@ -157,7 +157,6 @@ void loop(){
       setMotor(0, 1-k, dir[k], en[k]);
     }
   }
-  
 
   // Print block: for debugging purposes.
   Serial.print(vFilt[0]);
@@ -167,8 +166,8 @@ void loop(){
   Serial.print(output[0]);
   Serial.print(" ");
   Serial.print(output[1]);
-  Serial.print(" ");
-  Serial.print(tempsActuel);
+  //Serial.print(" ");
+  //Serial.print(tempsActuel);
   Serial.print(" ");
   Serial.print(eintegral[0]);
   Serial.print(" ");
@@ -268,7 +267,7 @@ void turning90degrees(){
     }
     initialValueT90D = fabs(pos[motorTurning]);
   } else if(startingTurning90deg){
-    if(fabs(initialValueT90D - fabs(pos[motorTurning])) < TURN_CRATE * TICKS_PER_TURN){ 
+    if(fabs(initialValueT90D - fabs(pos[motorTurning])) < TURN_CRATE * TICKSPERTURN){ 
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
     } else {
@@ -292,7 +291,7 @@ void turningAround(){
     initialValueTA = fabs(pos[0]); // It doesn't really matter which motor we use to check. Once one of the wheel did its job, we suppose the crate did a full rotation.
     // This can be improved upon if I realise it never turns fully around. 
   } else if(startingTurningAround){
-    if(fabs(initialValueTA - fabs(pos[0])) < TURN_CRATE * TICKS_PER_TURN){ 
+    if(fabs(initialValueTA - fabs(pos[0])) < TURN_CRATE * TICKSPERTURN){ 
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
     } else {
@@ -394,7 +393,6 @@ void computeVelocityAndController(){
   else {
     setMotor(target[2*k+1], 0, dir[k], en[k]);
   }
-  
 
   // End the loop, update the error.
   previousDir[k] = target[2*k+1];
