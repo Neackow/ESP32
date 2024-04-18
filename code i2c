@@ -45,3 +45,7 @@ rpc:call(sensor_fusion@orderCrate, hera_sendOrder, set_state_crate, [testRPC]).
 % FOR THE READ.
 I2C1 = grisp_i2c:open(i2c1), Message = grisp_i2c:transfer(I2C1, [{read, 16#40, 1, 1}]).
 Available = lists:nth(1, binary_to_list(lists:nth(1, Message))).
+
+% OTHER TESTS:
+- Send I2C : hera_sendOrder:send_i2c([0,1,0,0,0]).
+- Ping : net_adm:ping(sensor_fusion@orderCrate). 
