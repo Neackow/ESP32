@@ -103,10 +103,7 @@ void loop(){
   pos[1] = posi[1];
   interrupts();
 
-  // To control manually the commands. PROBLÈME : COMMANDE RESTE À UNE VALEUR BIZARRE LORSQUE 0.
-  //80 est un peu faible. Et très lent.
-  //90 aussi est un peu faible. Mais c'est mieux.
-  //100 est une bonne vitesse. Pas trop rapide, et au-dessus
+  // ********** <Manual control of the command: debugging tool> **********
   /*int speedReq = 140;
   if(tempsActuel < 7000){
     order[0] = 0;
@@ -134,6 +131,7 @@ void loop(){
     target[k] = order[k];
   }
   tempsActuel = millis();*/
+  // ********** </Manual control of the command: debugging tool> **********
   
   // The target is acquired via I2C. See function receiveEvent() and in setup().
 
@@ -158,21 +156,43 @@ void loop(){
     }
   }
 
-  // Print block: for debugging purposes.
+  // ********** <Printing block: debugging tool> **********
+  Serial.print(target[0]);
+  Serial.print(" ");
+  Serial.print(target[1]);
+  Serial.print(" ");
+  Serial.print(target[2]);
+  Serial.print(" ");
+  Serial.print(target[3]);
+  Serial.print(" ");
+  Serial.print(target[4]);
+  Serial.print(" ");
+  Serial.print(output[0]);
+  Serial.print(" ");
+  Serial.print(output[1]);
+  Serial.print(" ");
+  Serial.print(e[0]);
+  Serial.print(" ");
+  Serial.print(e[1]);
+  Serial.print(" ");
   Serial.print(vFilt[0]);
+  Serial.print(" ");
+  Serial.print(vFilt[1]);
+  Serial.println();
+  /*Serial.print(vFilt[0]);
   Serial.print(" ");
   Serial.print(vFilt[1]);
   Serial.print(" ");
   Serial.print(output[0]);
   Serial.print(" ");
   Serial.print(output[1]);
-  //Serial.print(" ");
-  //Serial.print(tempsActuel);
+  Serial.print(" ");
+  Serial.print(tempsActuel);
   Serial.print(" ");
   Serial.print(eintegral[0]);
   Serial.print(" ");
   Serial.print(eintegral[1]);
-  /*Serial.print(" ");
+  Serial.print(" ");
   Serial.print(speedReq);
   Serial.print(" ");
   Serial.print(e[0]);
@@ -188,11 +208,13 @@ void loop(){
   Serial.print(" ");
   Serial.print(pos[0]);
   Serial.print(" ");
-  Serial.print(pos[1]);*/
-  Serial.println();
+  Serial.print(pos[1]);
+  Serial.println();*/
+  // ********** </Printing block: debugging tool> **********
 
   // 625µs delay: to maintain correct sampling frequency of 1600 Hz.
   // 6 ticks per turn x 53 (Gearbox) x 2.5 RPS (max) = 795 Hz. x2 to avoid aliasing (Shannon's theorem) : ~1600 Hz at most.
+  // The velocity filter's coefficients have been established for this sampling frequency.
   delayMicroseconds(625);
 }
 
@@ -363,13 +385,23 @@ void computeVelocityAndController(){
     eintegral[k] += e[k]*deltaT;
 
     float limit = 70.0;
-    if(eintegral[k] > limit){
-      eintegral[k] = limit;
+    if(fabs(eintegral[k]) > limit){
+      if(eintegral[k] < 0){
+        eintegral[k] = -limit;
+      }
+      else {
+        eintegral[k] = limit;
+      }
     }
     float integralTerm = ki*eintegral[k];
 
-    if(integralTerm > ki*limit){ // So that it automatically adapts itself when I want to change boundary.
-      integralTerm = ki*limit;
+    if(fabs(integralTerm) > ki*limit){ // So that it automatically adapts itself when I want to change boundary.
+      if(integralTerm < 0){
+        integralTerm = -ki*limit;
+      }
+      else {
+        integralTerm = ki*limit;
+      }
     }
 
     // Compute the necessary command to reach the desired speed;
@@ -380,8 +412,9 @@ void computeVelocityAndController(){
       output[k] = 255;
     }
     int direction = target[2*k+1]; // target is already in int.
-    if(u < 0){
-      direction = 1 - direction; // Change direction if need be, without affecting the initial command. This is necessary to deal with potential overshoots.
+    if(u < 0 && targetVel > 0){
+      direction = 1 - direction;  // Change direction if need be, without affecting the initial command. This is necessary to deal with potential overshoots.
+                                  // Added a second condition because when we want to go backward, it is NORMAL that the error can be negative. But now, risk: overshoot in the negative, doesn't catch back.
     }
 
     // Set command
