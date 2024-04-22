@@ -51,11 +51,8 @@ int initialValueTS        = 0; // This is to store the initial counter value for
 int startingTestingSpeed  = 0; // Not the cleanest way: define an int which allows to know if we just started the mode, since all the rest is updated each loop.
 
 int motorTurning          = 0; // This will allow to store the motor that has to be considered, as we can either turn left or right.
-int initialValueT90D      = 0;
-int startingTurning90deg  = 0;
-
-int initialValueTA        = 0;
-int startingTurningAround = 0;
+int initialValue          = 0;
+int startingTurning       = 0;
 
 int available             = 1; // By default, the controller says that it is available to receive more commands.
 // ********** </Variables for the control modes> **********
@@ -143,12 +140,9 @@ void loop(){
   } else if (target[4] == 1){
     // Test the newly applied speed.
     testingTheNewSpeed();
-  } else if(target[4] == 2){
-    // Control mode which will make the crate turn by 90°.
-    turning90degrees();
-  } else if(target[4] == 3){
-    // Control mode which will make the crate spin on itself.
-    turningAround();
+  } else if(target[4] == 2 || target[4] == 3){
+    // Control mode which will make the crate turn by 90° or spin on itself, depending on the target received.
+    turning();
   } else {
     Serial.println("Invalid order for the crate-on-wheels.");
     for(int k = 0; k < NMOTORS; k++){
@@ -277,55 +271,33 @@ void testingTheNewSpeed(){
   }
 }
 
-// To accomplish a 90° turn.
-void turning90degrees(){
-  if(!startingTurning90deg){
+// To turn, wheter it be by 90° or to spin on itself.
+void turning(){
+  if(!startingTurning){
     available = 0;
-    startingTurning90deg = 1;
+    startingTurning = 1;
     if(target[0] > 0){
       motorTurning = 0;
     } else {
       motorTurning = 1;
     }
-    initialValueT90D = fabs(pos[motorTurning]);
-  } else if(startingTurning90deg){
-    if(fabs(initialValueT90D - fabs(pos[motorTurning])) < TURN_CRATE * TICKSPERTURN){ 
-      computeVelocityAndController<0>();
-      computeVelocityAndController<1>();
-    } else {
-      Serial.println("Turning by 90 degrees: done!");
-      for(int k = 0; k < 5; k++){
-        target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
-      }     
-      startingTurning90deg = 0;
-      available = 1;
-    }
-  } else {
-    Serial.println("Invalid value for startingTurning90deg.");
-  }
-}
-
-// To accomplish a full rotation on itself.
-void turningAround(){
-  if(!startingTurningAround){
-    available = 0;
-    startingTurningAround = 1;
-    initialValueTA = fabs(pos[0]); // It doesn't really matter which motor we use to check. Once one of the wheel did its job, we suppose the crate did a full rotation.
+    initialValue = fabs(pos[motorTurning]); // This checks which motor we need to take into account. When spinning on itself, this will lead to motor 1. 
+    // It doesn't really matter which motor we use to check. Once one of the wheel did its job, I suppose the crate did a full rotation.
     // This can be improved upon if I realise it never turns fully around. 
-  } else if(startingTurningAround){
-    if(fabs(initialValueTA - fabs(pos[0])) < TURN_CRATE * TICKSPERTURN){ 
+  } else if(startingTurning){
+    if(fabs(initialValue - fabs(pos[motorTurning])) < TURN_CRATE * TICKSPERTURN){ 
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
     } else {
-      Serial.println("Turning on itself: done!");
+      Serial.println("Turning: done!");
       for(int k = 0; k < 5; k++){
         target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
       }     
-      startingTurningAround = 0;
+      startingTurning = 0;
       available = 1;
     }
   } else {
-    Serial.println("Invalid value for startingTurningAround.");
+    Serial.println("Invalid value for startingTurning.");
   }
 }
 
@@ -352,7 +324,7 @@ void computeVelocityAndController(){
     prevT_V[k]  = currT_V;
   }
 
-  vFilt[k]    = 0.9806*vFilt[k] + 0.00973*v[k] + 0.0097*vPrev[k]; // Low-pass filter at 5 Hz.
+  vFilt[k]    = 0.9806*vFilt[k] + 0.00973*v[k] + 0.00973*vPrev[k]; // Low-pass filter at 5 Hz.
   vPrev[k]    = v[k];
 
   // ******************************************** //
@@ -385,16 +357,9 @@ void computeVelocityAndController(){
     eintegral[k] += e[k]*deltaT;
 
     float limit = 70.0;
-    if(fabs(eintegral[k]) > limit){
-      if(eintegral[k] < 0){
-        eintegral[k] = -limit;
-      }
-      else {
-        eintegral[k] = limit;
-      }
-    }
     float integralTerm = ki*eintegral[k];
 
+    // Windup: limit the integral term.
     if(fabs(integralTerm) > ki*limit){ // So that it automatically adapts itself when I want to change boundary.
       if(integralTerm < 0){
         integralTerm = -ki*limit;
