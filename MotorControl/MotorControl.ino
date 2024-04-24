@@ -15,7 +15,7 @@ const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 #define TICKSPERTURN  318     // Number of encoder ticks per wheel turn. 6 x 53 (6 ticks per shaft rotation, with the gearbox added to the mix).
 #define DISTPERTURN   0.2513  // Distance per wheel turn in [m]: 2xpix0.04 (wheel diameter: 8cm).
 #define NUM_TURN_TEST 7.9586  // To accomplish 2 [m], we need this number of turns due to the wheel diameter.  
-#define TURN_CRATE    1.78125 // Number of wheel turns required to turn the crate by 90°, in either direction, and also on itself.
+#define TURN_CRATE    1.15    // Number of wheel turns required to turn the crate by 90°, in either direction, and also on itself. Tuned to limit overshooting (not perfectly 1/4 a circle: 1.78125).
 // ********** </Motor values> **********
 
 // ********** <Controller variables> **********
@@ -101,7 +101,8 @@ void loop(){
   interrupts();
 
   // ********** <Manual control of the command: debugging tool> **********
-  /*int speedReq = 140;
+  /*
+  int speedReq = 120;
   if(tempsActuel < 7000){
     order[0] = 0;
     order[1] = 1;
@@ -151,7 +152,7 @@ void loop(){
   }
 
   // ********** <Printing block: debugging tool> **********
-  Serial.print(target[0]);
+  /*Serial.print(target[0]);
   Serial.print(" ");
   Serial.print(target[1]);
   Serial.print(" ");
@@ -160,18 +161,18 @@ void loop(){
   Serial.print(target[3]);
   Serial.print(" ");
   Serial.print(target[4]);
-  Serial.print(" ");
+  Serial.print(" ");*/
   Serial.print(output[0]);
   Serial.print(" ");
   Serial.print(output[1]);
-  Serial.print(" ");
+  /*Serial.print(" ");
   Serial.print(e[0]);
   Serial.print(" ");
   Serial.print(e[1]);
   Serial.print(" ");
   Serial.print(vFilt[0]);
   Serial.print(" ");
-  Serial.print(vFilt[1]);
+  Serial.print(vFilt[1]);*/
   Serial.println();
   /*Serial.print(vFilt[0]);
   Serial.print(" ");
