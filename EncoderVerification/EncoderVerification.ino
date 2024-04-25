@@ -37,7 +37,7 @@ const int en[]  = {8,19};  // Enable pins: sets PWM
 const int sa[]  = {7,20};  // Encoder pins SA: interrupt required
 const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 
-
+int output = 200;
 const long interval = 18000;
 float v[NMOTORS]    = {0.0,0.0};
 long currT          = 0;
@@ -129,19 +129,22 @@ void loop() {
 
     posPrev[0]  = pos[0];
     prevT[0]    = currT;
+    output = output - 0.5;
   }
 
   vFilt[0]    = 0.9806*vFilt[0] + 0.00973*v[0] + 0.00973*vPrev[0]; // 5Hz cut-off frequency, sampling at 1600Hz
   vPrev[0]    = v[0]; 
 
+  
   int direction = (int) target[1];
-  setMotor(1,200,DIR1,EN1);
-  //setMotor(0,200,DIR2,EN2);
+  setMotor(1,output,DIR1,EN1);
+  setMotor(0,output,DIR2,EN2);
   /*
   for(int k = 0; k < NMOTORS; k++){
     setMotor(direction[k],target[k],dir[k],en[k]);
   }*/
   
+  Serial.println(output);
   /*
   Serial.print("Motor1: ");
   Serial.print(pos[0]);
@@ -211,16 +214,16 @@ void encoder_F(){
 
 template <int i>
 void changeEncoder(){
-  Serial.print("Starting the changeEncoder function ");
-  Serial.print(micros());
+  //Serial.print("Starting the changeEncoder function ");
+  //Serial.print(micros());
   int a = digitalRead(sa[i]);
   if(a == HIGH){ 
     encoder_R(i);
   }
   else encoder_F(i);
-  Serial.print(" Ending the changeEncoder function ");
-  Serial.print(micros());
-  Serial.println();
+  //Serial.print(" Ending the changeEncoder function ");
+  //Serial.print(micros());
+  //Serial.println();
 }
 
 void encoder_R(int index){
