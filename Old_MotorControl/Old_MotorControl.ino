@@ -15,7 +15,7 @@ const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 #define TICKSPERTURN  318     // Number of encoder ticks per wheel turn. 6 x 53 (6 ticks per shaft rotation, with the gearbox added to the mix).
 #define DISTPERTURN   0.2513  // Distance per wheel turn in [m]: 2xpix0.04 (wheel diameter: 8cm).
 #define NUM_TURN_TEST 7.9586  // To accomplish 2 [m], we need this number of turns due to the wheel diameter.  
-#define TURN_CRATE    1.15    // Number of wheel turns required to turn the crate by 90°, in either direction, and also on itself. Tuned to limit overshooting (not perfectly 1/4 a circle: 1.78125).
+#define TURN_CRATE    1.78125 // Number of wheel turns required to turn the crate by 90°, in either direction, and also on itself.
 // ********** </Motor values> **********
 
 // ********** <Controller variables> **********
@@ -37,7 +37,7 @@ const long interval       = 18000;      // INITIAL WORKING VALUE: 20000. Used to
 
 // Control command
 float output[NMOTORS] = {0.0,0.0};          // Output of the controller
-float target[5]       = {0,0,0,0,0};        // Will be used for the desired motor behaviour. Intermediary variable to have a smooth profile.
+int target[5]         = {0,0,0,0,0};        // Contains the desired motor behaviour. Received from the GRiSP board, via I2C communication.
 int order[5]          = {0,0,0,0,0};        // For manual functioning. 
 
 unsigned long previousMillis[NMOTORS] = {0,0}; // Store previous time.
@@ -50,16 +50,10 @@ int previousDir[NMOTORS]  = {0,0};             // Used for hard reset of the int
 int initialValueTS        = 0; // This is to store the initial counter value for this test.
 int startingTestingSpeed  = 0; // Not the cleanest way: define an int which allows to know if we just started the mode, since all the rest is updated each loop.
 
+int motorTurning          = 0; // This will allow to store the motor that has to be considered, as we can either turn left or right.
 int initialValue          = 0;
 int startingTurning       = 0;
 
-int startingSlowingDown   = 0;
-int initialValueOutput[2] = {0,0};
-long lastTimeSlowingDown  = 0;
-long lastTimeEvolveSpeed  = 0;
-int storeTargetVel[5]     = {0,0,0,0,0}; // Used to store the values received by I2C. Contains desired final motor behaviour.
-
-int previousProtocol      = 0; // Allows to deal with slowingDown in the testingTheNewSpeed protocol.
 int available             = 1; // By default, the controller says that it is available to receive more commands.
 // ********** </Variables for the control modes> **********
 
@@ -107,47 +101,47 @@ void loop(){
   interrupts();
 
   // ********** <Manual control of the command: debugging tool> **********
-  // Will still work in the loop, because target is set to 0 initially.
-  /*
-  int speedReq = 120;
+  int speedReq = 90;
   if(tempsActuel < 7000){
-    storeTargetVel[0] = 0;
-    storeTargetVel[1] = 1;
-    storeTargetVel[2] = 0;
-    storeTargetVel[3] = 0;
+    order[0] = 0;
+    order[1] = 1;
+    order[2] = 0;
+    order[3] = 0;
     //order[4] = 0;
   }
   else if(tempsActuel >= 7000 && tempsActuel < 20000){
-    storeTargetVel[0] = speedReq;
-    storeTargetVel[1] = 1;
-    storeTargetVel[2] = speedReq;
-    storeTargetVel[3] = 0;
+    order[0] = speedReq;
+    order[1] = 1;
+    order[2] = speedReq;
+    order[3] = 0;
     //order[4] = 0;
   }
   else{
-    storeTargetVel[0] = 0;
-    storeTargetVel[1] = 1;
-    storeTargetVel[2] = 0;
-    storeTargetVel[3] = 0;
+    order[0] = 0;
+    order[1] = 1;
+    order[2] = 0;
+    order[3] = 0;
     //order[4] = 0;
   }
-  tempsActuel = millis();*/
+  
+  for(int k = 0; k < 4; k++){
+    target[k] = order[k];
+  }
+  tempsActuel = millis();
   // ********** </Manual control of the command: debugging tool> **********
   
   // The target is acquired via I2C. See function receiveEvent() and in setup().
 
   // Compute velocity & control the motors. Depending on the fifth argument of target, the desired behaviour varies.
-  if(target[4] == 0){ // Comparing a float with integer is internally taken to be comparison between two floats, so it's OK.
-    // In the normal behaviour, simply apply the commands. Use evolveSpeed for smooth profile.
-    evolveSpeed<0>();
-    evolveSpeed<1>();
+  if(target[4] == 0){
+    // In the normal behaviour, simply apply the commands.
+    computeVelocityAndController<0>();
+    computeVelocityAndController<1>();
   } else if (target[4] == 1){
     // Test the newly applied speed.
     testingTheNewSpeed();
-  } else if(target[4] == 2){ // This is called whenever we want to stop.
-    slowingDownToZero();
-  } else if(target[4] == 3){
-    // Control mode which will make the crate spin on itself.
+  } else if(target[4] == 2 || target[4] == 3){
+    // Control mode which will make the crate turn by 90° or spin on itself, depending on the target received.
     turning();
   } else {
     Serial.println("Invalid order for the crate-on-wheels.");
@@ -157,17 +151,24 @@ void loop(){
   }
 
   // ********** <Printing block: debugging tool> **********
+  Serial.print(" ");
   Serial.print(output[0]);
   Serial.print(" ");
   Serial.print(output[1]);
-  /*Serial.print(" ");
-  Serial.print(e[0]);
   Serial.print(" ");
-  Serial.print(e[1]);*/
+  Serial.print(vFilt[0]);
+  Serial.print(" ");
+  Serial.print(vFilt[1]);
   Serial.println();
+  /*  
+  Serial.print(" ");
+  Serial.print(pos[0]);
+  Serial.print(" ");
+  Serial.print(pos[1]);
+  Serial.println();*/
   // ********** </Printing block: debugging tool> **********
 
-  // 625 µs delay: to maintain correct sampling frequency of 1600 Hz.
+  // 625µs delay: to maintain correct sampling frequency of 1600 Hz.
   // 6 ticks per turn x 53 (Gearbox) x 2.5 RPS (max) = 795 Hz. x2 to avoid aliasing (Shannon's theorem) : ~1600 Hz at most.
   // The velocity filter's coefficients have been established for this sampling frequency.
   delayMicroseconds(625);
@@ -181,13 +182,10 @@ void loop(){
 void receiveMessage(int howMany) 
 {
   for(int i=0; i < howMany; i++){
-    storeTargetVel[i] = Wire.read();
-    //Serial.println(storeTargetVel[i]);
+    target[i] = Wire.read();
+    //Serial.println(target[i]);
   }
   //Serial.println();
-  target[1] = storeTargetVel[1];  // Direction 1
-  target[3] = storeTargetVel[3];  // Direction 2
-  target[4] = storeTargetVel[4];  // Command index. storeTargetVel is only used for storage, do not modify its value.
 }
 
 void sendMessage()
@@ -201,25 +199,7 @@ void sendMessage()
 // *************** CONTROL MODES ***************** //
 // *********************************************** //
 
-// This function is used to have a smooth velocity profile when used continuously. To slow down to 0, refer preferentially to the appropriate function.
-template <int j>
-void evolveSpeed(){
-  long currentTime = micros();
-  if(currentTime - lastTimeEvolveSpeed >= interval){ // Re-use the interval of 18 ms. Arbitrary.
-    lastTimeEvolveSpeed = currentTime;
-    if(target[j] > storeTargetVel[j]){ // Comparison between a float and an int: it will work.
-      target[j] = target[j] - 0.5;
-    } else if (target[j] < storeTargetVel[j]){
-      target[j] = target[j] + 0.5;
-    } else {
-      target[j] = target[j];
-    }
-  }
-  computeVelocityAndController<j>();
-}
-
-// To test the new speed : go forward for 2 [m], then backward over the same distance. Then, stop. We will go further than 2 [m] since we slow down nicely.
-// This is quite an ugly implementation. Some kind of FSM would have been better suited for this task. But it works.
+// To test the new speed : go forward for 2 [m], then backward over the same distance. Then, stop.
 void testingTheNewSpeed(){
   if(!startingTestingSpeed){
     available = 0; // We say that we are no longer available.
@@ -227,83 +207,29 @@ void testingTheNewSpeed(){
     initialValueTS = fabs(pos[0]);
   } else if(startingTestingSpeed){
     // NUM_TURN_TEST [turns] comes from the fact that we want 2 [m] and that 1 turn = 0.2513 [m].
-    // While not 2 [m] done and going forward, keep going.
     if(fabs(initialValueTS - fabs(pos[0])) < NUM_TURN_TEST * TICKSPERTURN && target[1] == 1){ // Full of fabs() to ensure a count going up, no matter the case.
-      evolveSpeed<0>();
-      evolveSpeed<1>();
-    } else if(fabs(initialValueTS - fabs(pos[0])) >= NUM_TURN_TEST * TICKSPERTURN && target[1] == 1){ // We have gone over 2 [m]. Now, come back.
-      previousProtocol += 1;
-      slowingDownToZero();
-    } else if(fabs(initialValueTS - fabs(pos[0])) < NUM_TURN_TEST * TICKSPERTURN && target[1] == 0){ // We finished slowing down the first time.
-      evolveSpeed<0>();
-      evolveSpeed<1>();
-    } else {
-      Serial.println("Testing the new velocity: test done!"); 
-      if(vFilt[0] != 0.0){
-        previousProtocol += 1; // To avoid going back again in the previous statement.
-        slowingDownToZero();
-      } else {  // When we return in this loop after slowing down, we enter this and finish this protocol.
-        startingTestingSpeed = 0;
-        target[4] = 0;
-        available = 1;
-      }      
-    }
-  } else {
-    Serial.println("Invalid value for startingTestingSpeed.");
-  }
-}
-
-void slowingDownToZero(){
-  if(!startingSlowingDown){
-    available = 0; // We say that we are no longer available.
-    startingSlowingDown = 1;
-    if(target[0] > target[2]){
-      target[0] = target[2]; // In case we were turning, we now say that the target is the same speed for both wheels, but the lowest one, in order to already slow down.
-    } else {
-      target[2] = target[0]; // This will have no impact if the targets were the same.
-    }
-    target[4] = 2; // This is used when calling this function from another protocol.
-    lastTimeSlowingDown = micros();
-    // Get the controller started on the new command.
-    computeVelocityAndController<0>();
-    computeVelocityAndController<1>();
-  } else if(startingSlowingDown){
-    if(fabs(vFilt[0]) > 5.0){ // Arbitrary boundary on an arbitrary motor, the goal just being to have a safe-band around 0 to be sure to stop fully.
-      long currentTime = micros();
-      if(currentTime - lastTimeSlowingDown >= interval){ // Re-use the interval of 18 ms. Arbitrary.
-        lastTimeSlowingDown = currentTime;
-        for(int k = 0; k < 2; k++){
-          target[2*k] = target[2*k] - 0.5;  // Slowly decrease the desired velocity. 0.5 has been found empirically, can be tuned to obtained desired results.
-        }
+      computeVelocityAndController<0>();
+      computeVelocityAndController<1>();
+    } else if(fabs(initialValueTS - fabs(pos[0])) >= NUM_TURN_TEST * TICKSPERTURN && target[1] == 1){ // We have gone over 5 [m]. Now, come back.
+      initialValueTS = fabs(pos[0]);
+      for(int k = 0; k < NMOTORS; k++){ // Stop the crate.
+        setMotor(0, 1-k, dir[k], en[k]); 
       }
+      target[1] = 0;  // Change direction.
+      target[3] = 1;
+    } else if(fabs(initialValueTS - fabs(pos[0])) < NUM_TURN_TEST * TICKSPERTURN && target[1] == 0){
       computeVelocityAndController<0>();
       computeVelocityAndController<1>();
     } else {
-      Serial.println("Slowing down: done!");
-      // Force 0 output and reset vFilt. We are at full stop.
-      for(int k = 0; k < 2; k++){
-        target[2*k] = 0;
-        vFilt[k]    = 0.0;  // Say we are at 0 speed.
-        output[k]   = 0.0;  // Force a 0 output.
-      }
-      if(previousProtocol == 1){
-        target[0] = storeTargetVel[0]; // Get back the target velocity before slowing down.
-        target[1] = 0;  // Change direction.
-        target[2] = storeTargetVel[1];
-        target[3] = 1;  // Change direction.
-        target[4] = 1;  // If we used "slowingDown" in the testingTheNewSpeed, we get ready to go back to that mode.
-        initialValueTS = fabs(pos[0]);  // To exit the other conditions.
-      } else if (previousProtocol == 2) { // Don't change the targets. The protocol testingTheNewSpeed is done.
-        target[4] = 1;
-        previousProtocol = 0; // Reset this.
-      } else {
-        target[4] = 0;
-        available = 1;  // We are available again for new commands. We put it here so that the testingTheNewSpeed protocol can keep going.
-      }
-      startingSlowingDown = 0;
+      Serial.println("Testing the new velocity: test done!");
+      for(int k = 0; k < 5; k++){
+        target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
+      }     
+      startingTestingSpeed = 0;
+      available = 1; // We are available again for new commands.
     }
   } else {
-    Serial.println("Invalid value for startingSlowingDown.");
+    Serial.println("Invalid value for startingTestingSpeed.");
   }
 }
 
@@ -312,21 +238,23 @@ void turning(){
   if(!startingTurning){
     available = 0;
     startingTurning = 1;
-    initialValue = fabs(pos[0]); // This checks which motor we need to take into account. When spinning on itself, this will lead to motor 1. 
+    if(target[0] > 0){
+      motorTurning = 0;
+    } else {
+      motorTurning = 1;
+    }
+    initialValue = fabs(pos[motorTurning]); // This checks which motor we need to take into account. When spinning on itself, this will lead to motor 1. 
     // It doesn't really matter which motor we use to check. Once one of the wheel did its job, I suppose the crate did a full rotation.
     // This can be improved upon if I realise it never turns fully around. 
   } else if(startingTurning){
-    if(fabs(initialValue - fabs(pos[0])) < TURN_CRATE * TICKSPERTURN){ 
+    if(fabs(initialValue - fabs(pos[motorTurning])) < TURN_CRATE * TICKSPERTURN){ 
       computeVelocityAndController<0>();
-      computeVelocityAndController<1>(); // Could custom with boundaries that make it slow down and stop at a nice time.
+      computeVelocityAndController<1>();
     } else {
       Serial.println("Turning: done!");
-      for(int k = 0; k < 2; k++){
-        target[2*k] = 0;
-        vFilt[k]    = 0.0;  // Say we are at 0 speed.
-        output[k]   = 0.0;  // Force a 0 output.
-      }
-      target[4] = 0; 
+      for(int k = 0; k < 5; k++){
+        target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
+      }     
       startingTurning = 0;
       available = 1;
     }
@@ -379,7 +307,7 @@ void computeVelocityAndController(){
   e[k] = targetVel - vFilt[k];
 
   // Main control loop.
-  if(fabs(targetVel) > 10.0){   // THIS COULD POSE A PROBLEM.
+  if(fabs(targetVel) > 10.0){
     
     // ******************************************** //
     // Hard reset of the integral term when switching direction.
