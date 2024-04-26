@@ -59,7 +59,7 @@ long lastTimeSlowingDown  = 0;
 long lastTimeEvolveSpeed  = 0;
 int storeTargetVel[5]     = {0,0,0,0,0}; // Used to store the values received by I2C. Contains desired final motor behaviour.
 
-int previousProtocol      = 0; // Allows to deal with slowingDown in the testingTheNewSpeed protocol.
+int testNewSpeedPhase     = 0; // Allows to deal with slowingDown in the testingTheNewSpeed protocol.
 int available             = 1; // By default, the controller says that it is available to receive more commands.
 // ********** </Variables for the control modes> **********
 
@@ -92,6 +92,7 @@ void setup() {
     prevT_V[k] = micros();
     previousMillis[k] = micros();
   }
+  lastTimeEvolveSpeed = micros();
   
   Wire.begin(0x40);               // Defines the board's slave address.
   Wire.onReceive(receiveMessage); // To receive the command.
@@ -144,7 +145,8 @@ void loop(){
   } else if (target[4] == 1){
     // Test the newly applied speed.
     testingTheNewSpeed();
-  } else if(target[4] == 2){ // This is called whenever we want to stop.
+  } else if(target[4] == 2){ 
+    // This is called whenever we want to stop.
     slowingDownToZero();
   } else if(target[4] == 3){
     // Control mode which will make the crate spin on itself.
@@ -202,6 +204,7 @@ void sendMessage()
 // *********************************************** //
 
 // This function is used to have a smooth velocity profile when used continuously. To slow down to 0, refer preferentially to the appropriate function.
+// BEWARE: maybe when we set for lower speed while turning, the controller may make us go backward. To verify.
 template <int j>
 void evolveSpeed(){
   long currentTime = micros();
@@ -232,15 +235,15 @@ void testingTheNewSpeed(){
       evolveSpeed<0>();
       evolveSpeed<1>();
     } else if(fabs(initialValueTS - fabs(pos[0])) >= NUM_TURN_TEST * TICKSPERTURN && target[1] == 1){ // We have gone over 2 [m]. Now, come back.
-      previousProtocol += 1;
+      testNewSpeedPhase = 1; // First step done, now slow-down smoothly.
       slowingDownToZero();
-    } else if(fabs(initialValueTS - fabs(pos[0])) < NUM_TURN_TEST * TICKSPERTURN && target[1] == 0){ // We finished slowing down the first time.
+    } else if(fabs(initialValueTS - fabs(pos[0])) < NUM_TURN_TEST * TICKSPERTURN && target[1] == 0){  // Back for 2 [m]
       evolveSpeed<0>();
       evolveSpeed<1>();
     } else {
       Serial.println("Testing the new velocity: test done!"); 
       if(vFilt[0] != 0.0){
-        previousProtocol += 1; // To avoid going back again in the previous statement.
+        testNewSpeedPhase = 2; // Second step done, now slow-down smoothly.
         slowingDownToZero();
       } else {  // When we return in this loop after slowing down, we enter this and finish this protocol.
         startingTestingSpeed = 0;
@@ -258,9 +261,9 @@ void slowingDownToZero(){
     available = 0; // We say that we are no longer available.
     startingSlowingDown = 1;
     if(target[0] > target[2]){
-      target[0] = target[2]; // In case we were turning, we now say that the target is the same speed for both wheels, but the lowest one, in order to already slow down.
-    } else {
-      target[2] = target[0]; // This will have no impact if the targets were the same.
+      target[0] = target[2];  // In case we were turning, we now say that the target is the same speed for both wheels, but the lowest one, in order to already slow down.
+    } else {                  // At most, step of 20 RPM in the target, will be barely noticeable by the human eye.
+      target[2] = target[0];  // This will have no impact if the targets were the same.
     }
     target[4] = 2; // This is used when calling this function from another protocol.
     lastTimeSlowingDown = micros();
@@ -286,16 +289,16 @@ void slowingDownToZero(){
         vFilt[k]    = 0.0;  // Say we are at 0 speed.
         output[k]   = 0.0;  // Force a 0 output.
       }
-      if(previousProtocol == 1){
+      if(testNewSpeedPhase == 1){
         target[0] = storeTargetVel[0]; // Get back the target velocity before slowing down.
         target[1] = 0;  // Change direction.
         target[2] = storeTargetVel[1];
         target[3] = 1;  // Change direction.
         target[4] = 1;  // If we used "slowingDown" in the testingTheNewSpeed, we get ready to go back to that mode.
-        initialValueTS = fabs(pos[0]);  // To exit the other conditions.
-      } else if (previousProtocol == 2) { // Don't change the targets. The protocol testingTheNewSpeed is done.
+        initialValueTS = fabs(pos[0]); // To exit the other conditions, reset the value here.
+      } else if (testNewSpeedPhase == 2) { // Don't change the targets. The protocol testingTheNewSpeed is done.
         target[4] = 1;
-        previousProtocol = 0; // Reset this.
+        testNewSpeedPhase = 0; // Reset this.
       } else {
         target[4] = 0;
         available = 1;  // We are available again for new commands. We put it here so that the testingTheNewSpeed protocol can keep going.
@@ -379,7 +382,7 @@ void computeVelocityAndController(){
   e[k] = targetVel - vFilt[k];
 
   // Main control loop.
-  if(fabs(targetVel) > 10.0){   // THIS COULD POSE A PROBLEM.
+  if(fabs(targetVel) > 10.0){   // This condition, be it kind off useless, helps the controller when the target is 0, so keep it.
     
     // ******************************************** //
     // Hard reset of the integral term when switching direction.
