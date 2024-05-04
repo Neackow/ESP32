@@ -53,11 +53,11 @@ int startingTestingSpeed  = 0; // Not the cleanest way: define an int which allo
 int initialValue          = 0;
 int startingTurning       = 0;
 
-int startingSlowingDown   = 0;
-int initialValueOutput[2] = {0,0};
-long lastTimeSlowingDown  = 0;
-long lastTimeEvolveSpeed  = 0;
-int storeTargetVel[5]     = {0,0,0,0,0}; // Used to store the values received by I2C. Contains desired final motor behaviour.
+int startingSlowingDown     = 0;
+int initialValueOutput[2]   = {0,0};
+long lastTimeSlowingDown    = 0;
+long lastTimeEvolveSpeed[2] = {0,0};
+int storeTarget[5]          = {0,0,0,0,0}; // Used to store the values received by I2C. Contains desired final motor behaviour.
 
 int testNewSpeedPhase     = 0; // Allows to deal with slowingDown in the testingTheNewSpeed protocol.
 int available             = 1; // By default, the controller says that it is available to receive more commands.
@@ -67,6 +67,13 @@ int available             = 1; // By default, the controller says that it is ava
 float kp = 10.0;    // INITIAL WORKING VALUE: 10.
 float ki = 15.0;    // INITIAL WORKING VALUE: 15.
 // ********** </PID constants> **********
+
+// ********** <Guard-rail GRiSP -> Raspberry> **********
+int previousCounterValue  = 0;
+int currentCounterValue   = 1;    // Initialise at one, so that it has to correct 
+const long twoSeconds     = 2000; // Will be compared to millis().
+long lastGuardRailTime    = 0;    // Used to test out the condition.
+// ********** </Guard-rail GRiSP -> Raspberry> **********
 
 
 void setup() {
@@ -91,8 +98,9 @@ void setup() {
     prevT[k] = micros();
     prevT_V[k] = micros();
     previousMillis[k] = micros();
+    lastTimeEvolveSpeed[k] = micros();
   }
-  lastTimeEvolveSpeed = micros();
+  lastGuardRailTime = millis();
   
   Wire.begin(0x40);               // Defines the board's slave address.
   Wire.onReceive(receiveMessage); // To receive the command.
@@ -101,6 +109,9 @@ void setup() {
 
 
 void loop(){
+
+  // Is the GRiSP board still up and running?
+  check_GRiSP_is_connected();
 
   noInterrupts();
   pos[0] = posi[0];
@@ -112,24 +123,24 @@ void loop(){
   /*
   int speedReq = 120;
   if(tempsActuel < 7000){
-    storeTargetVel[0] = 0;
-    storeTargetVel[1] = 1;
-    storeTargetVel[2] = 0;
-    storeTargetVel[3] = 0;
+    storeTarget[0] = 0;
+    storeTarget[1] = 1;
+    storeTarget[2] = 0;
+    storeTarget[3] = 0;
     //order[4] = 0;
   }
   else if(tempsActuel >= 7000 && tempsActuel < 20000){
-    storeTargetVel[0] = speedReq;
-    storeTargetVel[1] = 1;
-    storeTargetVel[2] = speedReq;
-    storeTargetVel[3] = 0;
+    storeTarget[0] = speedReq;
+    storeTarget[1] = 1;
+    storeTarget[2] = speedReq;
+    storeTarget[3] = 0;
     //order[4] = 0;
   }
   else{
-    storeTargetVel[0] = 0;
-    storeTargetVel[1] = 1;
-    storeTargetVel[2] = 0;
-    storeTargetVel[3] = 0;
+    storeTarget[0] = 0;
+    storeTarget[1] = 1;
+    storeTarget[2] = 0;
+    storeTarget[3] = 0;
     //order[4] = 0;
   }
   tempsActuel = millis();*/
@@ -159,14 +170,18 @@ void loop(){
   }
 
   // ********** <Printing block: debugging tool> **********
-  Serial.print(output[0]);
+  /*Serial.print(vFilt[0]);
   Serial.print(" ");
-  Serial.print(output[1]);
-  /*Serial.print(" ");
-  Serial.print(e[0]);
+  Serial.print(vFilt[1]);
   Serial.print(" ");
-  Serial.print(e[1]);*/
-  Serial.println();
+  Serial.print(target[0]);
+  Serial.print(" ");
+  Serial.print(target[2]);
+  Serial.print(" ");
+  Serial.print(storeTarget[0]);
+  Serial.print(" ");
+  Serial.print(storeTarget[2]);
+  Serial.println();*/
   // ********** </Printing block: debugging tool> **********
 
   // 625 µs delay: to maintain correct sampling frequency of 1600 Hz.
@@ -177,19 +192,42 @@ void loop(){
 
 
 // *********************************************** //
+// ************ CHECK GRISP IS ALIVE ************* //
+// *********************************************** //
+
+void check_GRiSP_is_connected(){
+  long currentTime = millis();
+  if(currentTime - lastGuardRailTime > twoSeconds){   // Check every two seconds that the GRiSP is pinging correctly. One ping should arrive every second.
+    if(currentCounterValue == previousCounterValue){  // The counter did not evolve. There is a problem. Send the target to 0 and call the slowingDown function.
+      for(int k = 0; k < 5; k++){
+        storeTarget[k] = 0.0; // We set everything to 0. The crate will not start again after the full stop.
+      }
+      slowingDownToZero();
+    }
+    lastGuardRailTime = currentTime;
+    previousCounterValue = currentCounterValue;
+  }
+}
+
+
+// *********************************************** //
 // ************* I2C COMMUNICATION *************** //
 // *********************************************** //
 
 void receiveMessage(int howMany) 
 {
-  for(int i=0; i < howMany; i++){
-    storeTargetVel[i] = Wire.read();
-    //Serial.println(storeTargetVel[i]);
+  if(howMany == 1){
+    currentCounterValue += Wire.read(); // Increment the counter by the value sent by the GRiSP.
+  } else {
+    for(int i=0; i < howMany; i++){
+      storeTarget[i] = Wire.read();
+      //Serial.println(storeTarget[i]);
+    }
+    //Serial.println();
+    target[1] = storeTarget[1];  // Direction 1
+    target[3] = storeTarget[3];  // Direction 2
+    target[4] = storeTarget[4];  // Command index. storeTarget is only used for storage, do not modify its value.
   }
-  //Serial.println();
-  target[1] = storeTargetVel[1];  // Direction 1
-  target[3] = storeTargetVel[3];  // Direction 2
-  target[4] = storeTargetVel[4];  // Command index. storeTargetVel is only used for storage, do not modify its value.
 }
 
 void sendMessage()
@@ -207,15 +245,19 @@ void sendMessage()
 // BEWARE: maybe when we set for lower speed while turning, the controller may make us go backward. To verify.
 template <int j>
 void evolveSpeed(){
+  int index = 0;
+  if(j == 1){
+    index = 2;
+  }
   long currentTime = micros();
-  if(currentTime - lastTimeEvolveSpeed >= interval){ // Re-use the interval of 18 ms. Arbitrary.
-    lastTimeEvolveSpeed = currentTime;
-    if(target[j] > storeTargetVel[j]){ // Comparison between a float and an int: it will work.
-      target[j] = target[j] - 0.5;
-    } else if (target[j] < storeTargetVel[j]){
-      target[j] = target[j] + 0.5;
+  if(currentTime - lastTimeEvolveSpeed[j] >= interval){ // Re-use the interval of 18 ms. Arbitrary.
+    lastTimeEvolveSpeed[j] = currentTime;
+    if(target[index] > storeTarget[index]){ // Comparison between a float and an int: it will work.
+      target[index] = target[index] - 0.5;
+    } else if (target[index] < storeTarget[index]){
+      target[index] = target[index] + 0.5;
     } else {
-      target[j] = target[j];
+      target[index] = target[index];
     }
   }
   computeVelocityAndController<j>();
@@ -247,6 +289,8 @@ void testingTheNewSpeed(){
         slowingDownToZero();
       } else {  // When we return in this loop after slowing down, we enter this and finish this protocol.
         startingTestingSpeed = 0;
+        storeTarget[0] = 0; // Required to avoid going backward when the protocol has finished.
+        storeTarget[2] = 0;
         target[4] = 0;
         available = 1;
       }      
@@ -264,6 +308,10 @@ void slowingDownToZero(){
       target[0] = target[2];  // In case we were turning, we now say that the target is the same speed for both wheels, but the lowest one, in order to already slow down.
     } else {                  // At most, step of 20 RPM in the target, will be barely noticeable by the human eye.
       target[2] = target[0];  // This will have no impact if the targets were the same.
+    }
+    if(vFilt[0] < 0){ // Correct the order sent by stopCrate if we were going backward.
+      target[1] = 0;
+      target[3] = 1;
     }
     target[4] = 2; // This is used when calling this function from another protocol.
     lastTimeSlowingDown = micros();
@@ -285,14 +333,13 @@ void slowingDownToZero(){
       Serial.println("Slowing down: done!");
       // Force 0 output and reset vFilt. We are at full stop.
       for(int k = 0; k < 2; k++){
-        target[2*k] = 0;
-        vFilt[k]    = 0.0;  // Say we are at 0 speed.
-        output[k]   = 0.0;  // Force a 0 output.
+        target[2*k]   = 0;
+        vFilt[k]      = 0.0;  // Say we are at 0 speed.
+        output[k]     = 0.0;  // Force a 0 output.
+        eintegral[k]  = 0.0;
       }
       if(testNewSpeedPhase == 1){
-        target[0] = storeTargetVel[0]; // Get back the target velocity before slowing down.
         target[1] = 0;  // Change direction.
-        target[2] = storeTargetVel[1];
         target[3] = 1;  // Change direction.
         target[4] = 1;  // If we used "slowingDown" in the testingTheNewSpeed, we get ready to go back to that mode.
         initialValueTS = fabs(pos[0]); // To exit the other conditions, reset the value here.
@@ -414,11 +461,14 @@ void computeVelocityAndController(){
       output[k] = 255;
     }
     int direction = target[2*k+1]; // target is already in int.
+
+    // In theory, this block is actually useless. However, since it helped me with several situations without impacting the others, I keep it. But when rolling, this is useless.
+    // It truly is for debugging purposes, when the crate-on-wheels is not on the floor and that we have to deal with overshoots. Doesn't work with overshoots in negative direction, however.
     if(u < 0 && targetVel > 0){
       direction = 1 - direction;  // Change direction if need be, without affecting the initial command. This is necessary to deal with potential overshoots.
                                   // Added a second condition because when we want to go backward, it is NORMAL that the error can be negative. But now, risk: overshoot in the negative, doesn't catch back.
     }
-
+    
     // Set command
     output[k] = (int) output[k]; // Casting a float to an int results in a rounding to the lower unit: e.g.: 200.9 -> 200.
 
