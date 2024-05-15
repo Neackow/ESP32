@@ -58,8 +58,8 @@ int available             = 1; // By default, the controller says that it is ava
 // ********** </Variables for the control modes> **********
 
 // ********** <PID constants> **********
-float kp = 10.0;    // INITIAL WORKING VALUE: 10.
-float ki = 15.0;    // INITIAL WORKING VALUE: 15.
+float kp = 8.0;    // INITIAL WORKING VALUE: 10.
+float ki = 8.0;    // INITIAL WORKING VALUE: 15.
 // ********** </PID constants> **********
 
 
@@ -90,6 +90,8 @@ void setup() {
   Wire.begin(0x40);               // Defines the board's slave address.
   Wire.onReceive(receiveMessage); // To receive the command.
   Wire.onRequest(sendMessage);    // To answer when the master wants to read.
+
+  Serial.print("[");
 }
 
 
@@ -101,7 +103,7 @@ void loop(){
   interrupts();
 
   // ********** <Manual control of the command: debugging tool> **********
-  int speedReq = 90;
+  int speedReq = 80;
   if(tempsActuel < 7000){
     order[0] = 0;
     order[1] = 1;
@@ -151,15 +153,8 @@ void loop(){
   }
 
   // ********** <Printing block: debugging tool> **********
-  Serial.print(" ");
-  Serial.print(output[0]);
-  Serial.print(" ");
-  Serial.print(output[1]);
-  Serial.print(" ");
   Serial.print(vFilt[0]);
-  Serial.print(" ");
-  Serial.print(vFilt[1]);
-  Serial.println();
+  Serial.print(",");
   /*  
   Serial.print(" ");
   Serial.print(pos[0]);
@@ -168,10 +163,6 @@ void loop(){
   Serial.println();*/
   // ********** </Printing block: debugging tool> **********
 
-  // 625µs delay: to maintain correct sampling frequency of 1600 Hz.
-  // 6 ticks per turn x 53 (Gearbox) x 2.5 RPS (max) = 795 Hz. x2 to avoid aliasing (Shannon's theorem) : ~1600 Hz at most.
-  // The velocity filter's coefficients have been established for this sampling frequency.
-  delayMicroseconds(625);
 }
 
 
@@ -278,16 +269,17 @@ void computeVelocityAndController(){
     previousMillis[k] = currentMillis;
     long currT_V      = micros();
     float deltaT_V    = ((float) (currT_V-prevT_V[k]))/1.0e6;
-    //int diff          = -(pos[k] - posPrev[k]);
     diff[k]           = coeffMotor[k]*(posPrev[k] - pos[k]); // The coefficient is there to ensure that both motors have positive speed when rotating in different directions.
     v[k]              = (diff[k]*60.0)/(PPR*GB_RATIO*deltaT_V); // The *60.0 is here to get the speed in RPM and not in RPS.
 
     posPrev[k]  = pos[k];
     prevT_V[k]  = currT_V;
+
+    vFilt[k]    = 0.894*vFilt[k] + 0.053*v[k] + 0.053*vPrev[k]; // Low-pass filter at 5 Hz, sampling freq of 55.56 Hz -> 56 Hz.
+    vPrev[k]    = v[k];
   }
 
-  vFilt[k]    = 0.9806*vFilt[k] + 0.00973*v[k] + 0.00973*vPrev[k]; // Low-pass filter at 5 Hz.
-  vPrev[k]    = v[k];
+  
 
   // ******************************************** //
   // To deal with the way I'm telling the controller the speed it needs to reach. Instead of sending negative values, I deal automatically with it here.

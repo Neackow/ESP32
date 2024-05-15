@@ -10,7 +10,7 @@ plt.rcParams["font.size"] = 16
 plt.rcParams.update({"text.usetex": True,"font.family": "sans-serif","font.sans-serif": ["Helvetica"]})"""
 
 # Generate a signal
-samplingFreq = 1600 # sampled at 1 kHz = 1000 samples / second
+samplingFreq = 56 # sampled at 1 kHz = 1000 samples / second
 tlims = [0,1]        # in seconds
 signalFreq = [2,50] # Cycles / second
 signalMag = [1,0.2] # magnitude of each sine
@@ -36,7 +36,7 @@ plt.xlabel("$\omega$ (cycles/s)")
 plt.ylabel("$|\hat{y}|$")
 
 # Low-pass filter
-w0 = 2*np.pi*5 # pole frequency (rad/s)
+w0 = 2*np.pi*1 # pole frequency (rad/s)
 num = w0        # transfer function numerator coefficients
 den = [1,w0]    # transfer function denominator coefficients
 lowPass = signal.TransferFunction(num,den) # Transfer function

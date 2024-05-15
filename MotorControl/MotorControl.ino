@@ -64,8 +64,8 @@ int available             = 1; // By default, the controller says that it is ava
 // ********** </Variables for the control modes> **********
 
 // ********** <PID constants> **********
-float kp = 10.0;    // INITIAL WORKING VALUE: 10.
-float ki = 15.0;    // INITIAL WORKING VALUE: 15.
+float kp = 8.0;    // INITIAL WORKING VALUE: 10.
+float ki = 8.0;    // INITIAL WORKING VALUE: 15.
 // ********** </PID constants> **********
 
 // ********** <Guard-rail GRiSP -> Raspberry> **********
@@ -121,27 +121,27 @@ void loop(){
   // ********** <Manual control of the command: debugging tool> **********
   // Will still work in the loop, because target is set to 0 initially.
   /*
-  int speedReq = 120;
+  int speedReq = 100;
   if(tempsActuel < 7000){
     storeTarget[0] = 0;
-    storeTarget[1] = 1;
+    target[1] = 1;
     storeTarget[2] = 0;
-    storeTarget[3] = 0;
-    //order[4] = 0;
+    target[3] = 0;
+    target[4] = 0;
   }
   else if(tempsActuel >= 7000 && tempsActuel < 20000){
     storeTarget[0] = speedReq;
-    storeTarget[1] = 1;
+    target[1] = 1;
     storeTarget[2] = speedReq;
-    storeTarget[3] = 0;
-    //order[4] = 0;
+    target[3] = 0;
+    target[4] = 0;
   }
   else{
     storeTarget[0] = 0;
-    storeTarget[1] = 1;
+    target[1] = 1;
     storeTarget[2] = 0;
-    storeTarget[3] = 0;
-    //order[4] = 0;
+    target[3] = 0;
+    target[4] = 2;
   }
   tempsActuel = millis();*/
   // ********** </Manual control of the command: debugging tool> **********
@@ -170,24 +170,21 @@ void loop(){
   }
 
   // ********** <Printing block: debugging tool> **********
-  /*Serial.print(vFilt[0]);
+  Serial.print(vFilt[0]);
   Serial.print(" ");
   Serial.print(vFilt[1]);
   Serial.print(" ");
-  Serial.print(target[0]);
-  Serial.print(" ");
-  Serial.print(target[2]);
-  Serial.print(" ");
   Serial.print(storeTarget[0]);
+  /*Serial.print(" ");
+  Serial.print(storeTarget[1]);
   Serial.print(" ");
   Serial.print(storeTarget[2]);
-  Serial.println();*/
+  Serial.print(" ");
+  Serial.print(storeTarget[3]);
+  Serial.print(" ");
+  Serial.print(storeTarget[4]);*/
+  Serial.println();
   // ********** </Printing block: debugging tool> **********
-
-  // 625 µs delay: to maintain correct sampling frequency of 1600 Hz.
-  // 6 ticks per turn x 53 (Gearbox) x 2.5 RPS (max) = 795 Hz. x2 to avoid aliasing (Shannon's theorem) : ~1600 Hz at most.
-  // The velocity filter's coefficients have been established for this sampling frequency.
-  delayMicroseconds(625);
 }
 
 
@@ -400,16 +397,17 @@ void computeVelocityAndController(){
     previousMillis[k] = currentMillis;
     long currT_V      = micros();
     float deltaT_V    = ((float) (currT_V-prevT_V[k]))/1.0e6;
-    //int diff          = -(pos[k] - posPrev[k]);
+
     diff[k]           = coeffMotor[k]*(posPrev[k] - pos[k]); // The coefficient is there to ensure that both motors have positive speed when rotating in different directions.
     v[k]              = (diff[k]*60.0)/(PPR*GB_RATIO*deltaT_V); // The *60.0 is here to get the speed in RPM and not in RPS.
 
     posPrev[k]  = pos[k];
     prevT_V[k]  = currT_V;
+
+    vFilt[k]    = 0.894*vFilt[k] + 0.053*v[k] + 0.053*vPrev[k]; // Low-pass filter at 1 Hz, sampling freq of 55.56 Hz -> 56 Hz.
+    vPrev[k]    = v[k];
   }
 
-  vFilt[k]    = 0.9806*vFilt[k] + 0.00973*v[k] + 0.00973*vPrev[k]; // Low-pass filter at 5 Hz.
-  vPrev[k]    = v[k];
 
   // ******************************************** //
   // To deal with the way I'm telling the controller the speed it needs to reach. Instead of sending negative values, I deal automatically with it here.
