@@ -91,7 +91,8 @@ void setup() {
   Wire.onReceive(receiveMessage); // To receive the command.
   Wire.onRequest(sendMessage);    // To answer when the master wants to read.
 
-  Serial.print("[");
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
 }
 
 
@@ -150,6 +151,7 @@ void loop(){
     for(int k = 0; k < NMOTORS; k++){
       setMotor(0, 1-k, dir[k], en[k]);
     }
+
   }
 
   // ********** <Printing block: debugging tool> **********
@@ -162,7 +164,7 @@ void loop(){
   Serial.print(pos[1]);
   Serial.println();*/
   // ********** </Printing block: debugging tool> **********
-
+  delay(10);
 }
 
 

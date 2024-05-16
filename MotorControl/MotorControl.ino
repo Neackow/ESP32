@@ -105,6 +105,9 @@ void setup() {
   Wire.begin(0x40);               // Defines the board's slave address.
   Wire.onReceive(receiveMessage); // To receive the command.
   Wire.onRequest(sendMessage);    // To answer when the master wants to read.
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
 }
 
 
@@ -129,7 +132,7 @@ void loop(){
     target[3] = 0;
     target[4] = 0;
   }
-  else if(tempsActuel >= 7000 && tempsActuel < 20000){
+  else if(tempsActuel >= 7000 && tempsActuel < 15000){
     storeTarget[0] = speedReq;
     target[1] = 1;
     storeTarget[2] = speedReq;
@@ -170,11 +173,8 @@ void loop(){
   }
 
   // ********** <Printing block: debugging tool> **********
-  Serial.print(vFilt[0]);
-  Serial.print(" ");
-  Serial.print(vFilt[1]);
-  Serial.print(" ");
-  Serial.print(storeTarget[0]);
+  /*Serial.print(vFilt[0]);
+  Serial.print(",");
   /*Serial.print(" ");
   Serial.print(storeTarget[1]);
   Serial.print(" ");
@@ -182,9 +182,10 @@ void loop(){
   Serial.print(" ");
   Serial.print(storeTarget[3]);
   Serial.print(" ");
-  Serial.print(storeTarget[4]);*/
-  Serial.println();
+  Serial.print(storeTarget[4]);
+  Serial.println();*/
   // ********** </Printing block: debugging tool> **********
+  //delay(5);
 }
 
 
