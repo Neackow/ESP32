@@ -25,19 +25,19 @@ int   posPrev[NMOTORS]      = {0,0};  // Previous value of the encoder count.
 
 long  prevT_V[NMOTORS]    = {0,0};      // Previous time at which a velocity computation was made.
 long  prevT[NMOTORS]      = {0,0};      // Previous time at which a computation was made.
-float eprev[NMOTORS]      = {0.0,0.0};  //Previous error in the controller.
+float eprev[NMOTORS]      = {0.0,0.0};  // Previous error in the controller.
 float eintegral[NMOTORS]  = {0.0,0.0};  // Store the evolution of the integral error.
 
-float vFilt[NMOTORS]      = {0.0,0.0};  // Filtered speed.
-float vPrev[NMOTORS]      = {0.0,0.0};  // Previous speed.
-float v[NMOTORS]          = {0.0,0.0};  // Computed speed (live).
+float vFilt[NMOTORS]      = {0.0,0.0};  // Filtered velocity.
+float vPrev[NMOTORS]      = {0.0,0.0};  // Previous velocity.
+float v[NMOTORS]          = {0.0,0.0};  // Computed velocity (live).
 float e[NMOTORS]          = {0.0,0.0};  // Current error.
 int diff[NMOTORS]         = {0,0};      // Used to store the counter difference.
-const long interval       = 18000;      // INITIAL WORKING VALUE: 20000. Used to filter in the controller.
+const long interval       = 18000;      // Used to filter in the controller.
 
 // Control command
 float output[NMOTORS] = {0.0,0.0};          // Output of the controller
-int target[5]         = {0,0,0,0,0};        // Contains the desired motor behaviour. Received from the GRiSP board, via I2C communication.
+int target[5]         = {0,0,0,0,0};        // Contains the desired motor behaviour. Received from the GRiSP2 board, via I2C communication.
 int order[5]          = {0,0,0,0,0};        // For manual functioning. 
 
 unsigned long previousMillis[NMOTORS] = {0,0}; // Store previous time.
@@ -48,7 +48,7 @@ int previousDir[NMOTORS]  = {0,0};             // Used for hard reset of the int
 
 // ********** <Variables for the control modes> **********
 int initialValueTS        = 0; // This is to store the initial counter value for this test.
-int startingTestingSpeed  = 0; // Not the cleanest way: define an int which allows to know if we just started the mode, since all the rest is updated each loop.
+int startingTestingVelocity  = 0; // Not the cleanest way: define an int which allows to know if we just started the mode, since all the rest is updated each loop.
 
 int motorTurning          = 0; // This will allow to store the motor that has to be considered, as we can either turn left or right.
 int initialValue          = 0;
@@ -58,8 +58,8 @@ int available             = 1; // By default, the controller says that it is ava
 // ********** </Variables for the control modes> **********
 
 // ********** <PID constants> **********
-float kp = 8.0;    // INITIAL WORKING VALUE: 10.
-float ki = 8.0;    // INITIAL WORKING VALUE: 15.
+float kp = 8.0;
+float ki = 8.0;
 // ********** </PID constants> **********
 
 
@@ -104,7 +104,7 @@ void loop(){
   interrupts();
 
   // ********** <Manual control of the command: debugging tool> **********
-  int speedReq = 80;
+  int velocityReq = 80;
   if(tempsActuel < 7000){
     order[0] = 0;
     order[1] = 1;
@@ -113,9 +113,9 @@ void loop(){
     //order[4] = 0;
   }
   else if(tempsActuel >= 7000 && tempsActuel < 20000){
-    order[0] = speedReq;
+    order[0] = velocityReq;
     order[1] = 1;
-    order[2] = speedReq;
+    order[2] = velocityReq;
     order[3] = 0;
     //order[4] = 0;
   }
@@ -141,10 +141,10 @@ void loop(){
     computeVelocityAndController<0>();
     computeVelocityAndController<1>();
   } else if (target[4] == 1){
-    // Test the newly applied speed.
-    testingTheNewSpeed();
+    // Test the newly applied velocity.
+    testingTheNewVelocity();
   } else if(target[4] == 2 || target[4] == 3){
-    // Control mode which will make the crate turn by 90° or spin on itself, depending on the target received.
+    // Control mode which will make the crate turn by 90° or spin on itself, depending on the target received. Old version of turning.
     turning();
   } else {
     Serial.println("Invalid order for the crate-on-wheels.");
@@ -164,7 +164,7 @@ void loop(){
   Serial.print(pos[1]);
   Serial.println();*/
   // ********** </Printing block: debugging tool> **********
-  delay(10);
+  delay(10); // To get data only every 10 ms.
 }
 
 
@@ -192,13 +192,13 @@ void sendMessage()
 // *************** CONTROL MODES ***************** //
 // *********************************************** //
 
-// To test the new speed : go forward for 2 [m], then backward over the same distance. Then, stop.
-void testingTheNewSpeed(){
-  if(!startingTestingSpeed){
+// To test the new velocity : go forward for 2 [m], then backward over the same distance. Then, stop.
+void testingTheNewVelocity(){
+  if(!startingTestingVelocity){
     available = 0; // We say that we are no longer available.
-    startingTestingSpeed = 1;
+    startingTestingVelocity = 1;
     initialValueTS = fabs(pos[0]);
-  } else if(startingTestingSpeed){
+  } else if(startingTestingVelocity){
     // NUM_TURN_TEST [turns] comes from the fact that we want 2 [m] and that 1 turn = 0.2513 [m].
     if(fabs(initialValueTS - fabs(pos[0])) < NUM_TURN_TEST * TICKSPERTURN && target[1] == 1){ // Full of fabs() to ensure a count going up, no matter the case.
       computeVelocityAndController<0>();
@@ -218,11 +218,11 @@ void testingTheNewSpeed(){
       for(int k = 0; k < 5; k++){
         target[k] = 0; // Set everything to 0. We stop the crate and wait for the next command.
       }     
-      startingTestingSpeed = 0;
+      startingTestingVelocity = 0;
       available = 1; // We are available again for new commands.
     }
   } else {
-    Serial.println("Invalid value for startingTestingSpeed.");
+    Serial.println("Invalid value for startingTestingVelocity.");
   }
 }
 
@@ -271,8 +271,8 @@ void computeVelocityAndController(){
     previousMillis[k] = currentMillis;
     long currT_V      = micros();
     float deltaT_V    = ((float) (currT_V-prevT_V[k]))/1.0e6;
-    diff[k]           = coeffMotor[k]*(posPrev[k] - pos[k]); // The coefficient is there to ensure that both motors have positive speed when rotating in different directions.
-    v[k]              = (diff[k]*60.0)/(PPR*GB_RATIO*deltaT_V); // The *60.0 is here to get the speed in RPM and not in RPS.
+    diff[k]           = coeffMotor[k]*(posPrev[k] - pos[k]); // The coefficient is there to ensure that both motors have positive velocity when rotating in different directions.
+    v[k]              = (diff[k]*60.0)/(PPR*GB_RATIO*deltaT_V); // The *60.0 is here to get the velocity in RPM and not in RPS.
 
     posPrev[k]  = pos[k];
     prevT_V[k]  = currT_V;
@@ -284,14 +284,14 @@ void computeVelocityAndController(){
   
 
   // ******************************************** //
-  // To deal with the way I'm telling the controller the speed it needs to reach. Instead of sending negative values, I deal automatically with it here.
+  // To deal with the way I'm telling the controller the velocity it needs to reach. Instead of sending negative values, I deal automatically with it here.
   float coeffTargetVel = 1.0;
   if(k == 0){
-    if(target[2*k+1] == 0){ // If MOTOR1 : POSITIVE SPEED when DIR1 and NEGATIVE SPEED when DIR0.
+    if(target[2*k+1] == 0){ // If MOTOR1 : POSITIVE VELOCITY when DIR1 and NEGATIVE VELOCITY when DIR0.
       coeffTargetVel = -1.0;
     }
   } else {
-    if(target[2*k+1] == 1){ // If MOTOR2 : POSITIVE SPEED when DIR0 and NEGATIVE SPEED when DIR1.
+    if(target[2*k+1] == 1){ // If MOTOR2 : POSITIVE VELOCITY when DIR0 and NEGATIVE VELOCITY when DIR1.
       coeffTargetVel = -1.0;
     }
   }
@@ -315,7 +315,7 @@ void computeVelocityAndController(){
     float limit = 70.0;
     float integralTerm = ki*eintegral[k];
 
-    // Windup: limit the integral term.
+    // Limiter: limit the integral term.
     if(fabs(integralTerm) > ki*limit){ // So that it automatically adapts itself when I want to change boundary.
       if(integralTerm < 0){
         integralTerm = -ki*limit;
@@ -325,7 +325,7 @@ void computeVelocityAndController(){
       }
     }
 
-    // Compute the necessary command to reach the desired speed;
+    // Compute the necessary command to reach the desired velocity;
     float u = kp*e[k] + integralTerm; 
 
     output[k] = fabs(u);
@@ -341,7 +341,7 @@ void computeVelocityAndController(){
     // Set command
     output[k] = (int) output[k]; // Casting a float to an int results in a rounding to the lower unit: e.g.: 200.9 -> 200.
 
-    // Format: setMotor(direction, targetSpeed, directionPin, enablePin);
+    // Format: setMotor(direction, targetVelocity, directionPin, enablePin);
     setMotor(direction, output[k], dir[k], en[k]);
   }
   else {
