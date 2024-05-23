@@ -237,8 +237,7 @@ void turning(){
       motorTurning = 1;
     }
     initialValue = fabs(pos[motorTurning]); // This checks which motor we need to take into account. When spinning on itself, this will lead to motor 1. 
-    // It doesn't really matter which motor we use to check. Once one of the wheel did its job, I suppose the crate did a full rotation.
-    // This can be improved upon if I realise it never turns fully around. 
+    // It doesn't really matter which motor we use to check. Once one of the wheel did its job, assume the crate did a full rotation.
   } else if(startingTurning){
     if(fabs(initialValue - fabs(pos[motorTurning])) < TURN_CRATE * TICKSPERTURN){ 
       computeVelocityAndController<0>();
@@ -261,7 +260,7 @@ void turning(){
 // ************* VELOCITY & CONTROL ************** //
 // *********************************************** //
 
-template <int k> // I can use prevT[k], posPrev[k], target[k], pos[k]. No need of an index, thanks to template.
+template <int k> // Can use prevT[k], posPrev[k], target[k], pos[k]. No need of an index, thanks to template.
 void computeVelocityAndController(){
   unsigned long currentMillis = micros(); 
   float deltaT  = ((float) (currentMillis - prevT[k]))/1.0e6;
@@ -284,7 +283,7 @@ void computeVelocityAndController(){
   
 
   // ******************************************** //
-  // To deal with the way I'm telling the controller the velocity it needs to reach. Instead of sending negative values, I deal automatically with it here.
+  // To deal with the way the controller is being told the velocity it needs to reach. Instead of sending negative values, deal automatically with it here.
   float coeffTargetVel = 1.0;
   if(k == 0){
     if(target[2*k+1] == 0){ // If MOTOR1 : POSITIVE VELOCITY when DIR1 and NEGATIVE VELOCITY when DIR0.
@@ -316,7 +315,7 @@ void computeVelocityAndController(){
     float integralTerm = ki*eintegral[k];
 
     // Limiter: limit the integral term.
-    if(fabs(integralTerm) > ki*limit){ // So that it automatically adapts itself when I want to change boundary.
+    if(fabs(integralTerm) > ki*limit){ // So that it automatically adapts itself when change in boundary.
       if(integralTerm < 0){
         integralTerm = -ki*limit;
       }

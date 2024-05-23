@@ -1,3 +1,6 @@
+// Author's note: initial code to debug the encoders. Was used for some time to do some tests, but kept evolving. EncoderTest is an easier version of this code, to print only the counts. Here,
+// it allows to check the velocity. Kept for archive purposes, mostly.
+
 #include <Wire.h>
 
 
@@ -108,7 +111,7 @@ void loop() {
 
   int direction[NMOTORS];
   direction[0] = 1;
-  direction[1] = 1-direction[0]; // This version is when I want to go forward or backward. It automatically gets 0 or 1 when I put 1 or 0 on direction[0].
+  direction[1] = 1-direction[0]; // This version is when we want to go forward or backward. It automatically gets 0 or 1 when we put 1 or 0 on direction[0].
   */
   /*
   // To go left, right, etc.
@@ -132,7 +135,7 @@ void loop() {
     output = output - 0.5;
   }
 
-  vFilt[0]    = 0.9806*vFilt[0] + 0.00973*v[0] + 0.00973*vPrev[0]; // 5Hz cut-off frequency, sampling at 1600Hz
+  vFilt[0]    = 0.9806*vFilt[0] + 0.00973*v[0] + 0.00973*vPrev[0]; // 5Hz cut-off frequency, sampling at 1600Hz. That is not correct, updated filter is MotorControl.ino
   vPrev[0]    = v[0]; 
 
   

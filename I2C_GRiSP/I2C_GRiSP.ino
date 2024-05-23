@@ -1,3 +1,5 @@
+// Code to test the I2C communication between a GRiSP2 and an ESP32/Raspberry board.
+
 #include <Wire.h>
 
 int dataArray[5];
@@ -17,7 +19,7 @@ void loop()
   delay(10);
 }
 
-//the function to be called, takes no parameters and returns nothing.
+// the function to be called when master requests data, takes no parameters and returns nothing.
 void requestEvent()
 {
   /*byte b1 = 0x01;
