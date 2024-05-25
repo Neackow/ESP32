@@ -18,7 +18,7 @@ const int sb[]  = {6,21};  // Encoder pins SB: interrupt required
 #define TICKSPERTURN  318     // Number of encoder ticks per wheel turn. 6 x 53 (6 ticks per shaft rotation, with the gearbox added to the mix).
 #define DISTPERTURN   0.2513  // Distance per wheel turn in [m]: 2xpix0.04 (wheel diameter: 8cm).
 #define NUM_TURN_TEST 7.9586  // To accomplish 2 [m], we need this number of turns due to the wheel diameter.  
-#define TURN_CRATE    1.15    // Number of wheel turns required to turn the crate by 90°, in either direction, or on itself. Tuned to limit overshooting (not perfectly 1/4 a circle: 1.78125).
+#define TURN_CRATE    1.40    // Number of wheel turns required to turn the crate by 90°, in either direction, or on itself. Tuned to limit overshooting (not perfectly 1/4 a circle: 1.78125).
 // ********** </Motor values> **********
 
 // ********** <Controller variables> **********
@@ -74,7 +74,7 @@ float ki = 8.0;
 // ********** <Guard-rail GRiSP2 -> Raspberry> **********
 int previousCounterValue  = 0;
 int currentCounterValue   = 1;    // Initialise at one, to avoid any problems at the first loop.
-const long twoSeconds     = 2000; // Will be compared to millis().
+const long oneSecond      = 1000; // Will be compared to millis().
 long lastGuardRailTime    = 0;    // Used to test out the condition.
 // ********** </Guard-rail GRiSP2 -> Raspberry> **********
 
@@ -126,8 +126,8 @@ void loop(){
   interrupts();
 
   // ********** <Manual control of the command: debugging tool> **********
-  /*
-  int velocityReq = 100;
+  
+  /*int velocityReq = 100;
   if(tempsActuel < 7000){
     storeTarget[0] = 0;
     target[1] = 1;
@@ -198,7 +198,7 @@ void loop(){
 
 void check_GRiSP_is_connected(){
   long currentTime = millis();
-  if(currentTime - lastGuardRailTime > twoSeconds){   // Check every two seconds that the GRiSP is pinging correctly. One ping should arrive every second.
+  if(currentTime - lastGuardRailTime > oneSecond){   // Check every two seconds that the GRiSP is pinging correctly. One ping should arrive every second.
     if(currentCounterValue == previousCounterValue){  // The counter did not evolve. There is a problem. Send the target to 0 and call the slowingDown function.
       for(int k = 0; k < 5; k++){
         storeTarget[k] = 0.0; // We set everything to 0. The crate will not start again after the full stop.
@@ -365,12 +365,13 @@ void turning(){
     initialValue = fabs(pos[0]); // This checks which motor we need to take into account. When spinning on itself, this will lead to motor 1. 
     // It doesn't really matter which motor we use to check. Once one of the wheel did its job, assume the crate did a full rotation.
   } else if(startingTurning){
-    if(fabs(initialValue - fabs(pos[0])) < TURN_CRATE * TICKSPERTURN){ 
-      computeVelocityAndController<0>();
-      computeVelocityAndController<1>(); // Could custom with boundaries that make it slow down and stop at a nice time.
+    if(fabs(initialValue - fabs(pos[0])) < TURN_CRATE * TICKSPERTURN){
+      evolveVelocity<0>();
+      evolveVelocity<1>();
     } else {
       Serial.println("Turning: done!");
       for(int k = 0; k < 2; k++){
+        storeTarget[2*k] = 0;
         target[2*k] = 0;
         vFilt[k]    = 0.0;  // Say we are at 0 velocity.
         output[k]   = 0.0;  // Force a 0 output.
