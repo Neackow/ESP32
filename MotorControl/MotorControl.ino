@@ -176,9 +176,15 @@ void loop(){
   }
 
   // ********** <Printing block: debugging tool> **********
-  /*Serial.print(vFilt[0]);
+  /*Serial.print(tempsActuel);
+  Serial.print(" ");
+  Serial.print(output[0]);
+  Serial.print(" ");
+  Serial.print(output[1]);
+
+  Serial.print(vFilt[0]);
   Serial.print(",");
-  /*Serial.print(" ");
+
   Serial.print(storeTarget[1]);
   Serial.print(" ");
   Serial.print(storeTarget[2]);

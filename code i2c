@@ -25,21 +25,21 @@ erl -sname ketchup@neackow_z4 -setcookie TestingCookie
 erl -sname fries@neackow_z4 -setcookie TestingCookie
 
 
- -> Fait : nom : sensor_fusion@nav_1 & sensor_fusion@nav_2
+ -> Fait : nom : movement_detection@nav_1 & movement_detection@nav_2
 net_kernel:connect_node(remote_nav_2@neackow_z4). -> fail.
 
-net_adm:ping(sensor_fusion@nav_2). -> pong then crash. WHEN IN REMOTE.
+net_adm:ping(movement_detection@nav_2). -> pong then crash. WHEN IN REMOTE.
 net_adm:ping(remote_nav_2). -> pang.
 net_adm:ping(remote_nav_2@neackow_z4). -> pang.
 net_adm:ping(nav_2). -> pang.
 
-rpc:call(sensor_fusion@nav_2, sensor_fusion, output_log, [["Test",[5]]]). % DOESN'T WORK.
-rpc:call(sensor_fusion@nav_2, sensor_fusion, launch, []).
-rpc:call(sensor_fusion@nav_2, sensor_fusion, stop_all, []).
+rpc:call(movement_detection@nav_2, movement_detection, output_log, [["Test",[5]]]). % DOESN'T WORK.
+rpc:call(movement_detection@nav_2, movement_detection, launch, []).
+rpc:call(movement_detection@nav_2, movement_detection, stop_all, []).
 
 
-rpc:call(sensor_fusion@nav_2, lists, sort, [[a,e,f,t,h,s,a]]). % TO TEST IF RPC:CALL WORKS.
-rpc:call(sensor_fusion@orderCrate, hera_sendOrder, set_state_crate, [testRPC]).
+rpc:call(movement_detection@nav_2, lists, sort, [[a,e,f,t,h,s,a]]). % TO TEST IF RPC:CALL WORKS.
+rpc:call(movement_detection@orderCrate, hera_sendOrder, set_state_crate, [testRPC]).
 
 
 % FOR THE READ.
@@ -48,4 +48,4 @@ Available = lists:nth(1, binary_to_list(lists:nth(1, Message))).
 
 % OTHER TESTS:
 - Send I2C : hera_sendOrder:send_i2c([0,1,0,0,0]).
-- Ping : net_adm:ping(sensor_fusion@orderCrate). 
+- Ping : net_adm:ping(movement_detection@orderCrate). 
