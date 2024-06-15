@@ -1,6 +1,7 @@
-# ESP32
-Code for the ESP32 - Motor controller
+# Code of the Raspberry Pi Pico W
 
-It turns out that historically, I was to use an ESP32, but it was not well suited for my application. I am using now a Raspberry Pi Pico W, more powerful and working. Name not changed to avoid any kind of git problems.
+Repository of all the code destined to the Raspberry Pi Pico W. This code should work for any micro-controller (ESP32, Arduino, etc.)
+Historically, an ESP32 NodeMCU-32S was used, but it was not well suited for the application. Now, a Raspberry Pi Pico W is used. The name of the repository was not changed to avoid any kind of git problems.
 
-Explain what are all the subfolders. 
+This repository is composed of the following folders:
+  * 
