@@ -176,6 +176,29 @@ void loop(){
   }
 
   // ********** <Printing block: debugging tool> **********
+  /*Serial.print(" v[0]: ");
+  Serial.print(v[0]);
+  Serial.print(" v[1]: ");
+  Serial.print(v[1]);
+  Serial.print(" vP[0]: ");
+  Serial.print(vPrev[0]);
+  Serial.print(" vP[1]: ");
+  Serial.print(vPrev[1]);
+  Serial.print(" T[4]: ");
+  Serial.print(target[4]);
+  Serial.print(" VF[0]: ");
+  Serial.print(vFilt[0]);
+  Serial.print(" VF[1]: ");
+  Serial.print(vFilt[1]);
+  Serial.print(" E[0]: ");
+  Serial.print(e[0]);
+  Serial.print(" E[1]: ");
+  Serial.print(e[1]);
+  Serial.print(" EI[0]: ");
+  Serial.print(eintegral[0]);
+  Serial.print(" EI[1]: ");
+  Serial.print(eintegral[1]);
+  Serial.println();
   /*Serial.print(tempsActuel);
   Serial.print(" ");
   Serial.print(output[0]);
@@ -377,10 +400,14 @@ void turning(){
     } else {
       Serial.println("Turning: done!");
       for(int k = 0; k < 2; k++){
-        storeTarget[2*k] = 0;
-        target[2*k] = 0;
-        vFilt[k]    = 0.0;  // Say we are at 0 velocity.
-        output[k]   = 0.0;  // Force a 0 output.
+        storeTarget[2*k]  = 0;
+        target[2*k]       = 0;
+        vFilt[k]          = 0.0;  // Say we are at 0 velocity.
+        v[k]              = 0.0;  // TO BE CLEANER: either use the slowing down routine, or create a function named "resetAll" and clear every variable there.
+        vPrev[k]          = 0.0;
+        output[k]         = 0.0;  // Force a 0 output.
+        eintegral[k]      = 0.0;
+        e[k]              = 0.0;
       }
       target[4] = 0; 
       startingTurning = 0;
